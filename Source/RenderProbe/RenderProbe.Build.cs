@@ -12,7 +12,22 @@ public class RenderProbe : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			"EditorSubsystem"
 		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"ImageCore",
+			"Json",
+			"JsonUtilities",
+			"MaterialEditor",
+			"RHI"
+		});
+
+		if (Target.Configuration != UnrealTargetConfiguration.Test && Target.Configuration != UnrealTargetConfiguration.Shipping)
+		{
+			PrivateDependencyModuleNames.Add("CQTest");
+		}
 	}
 }
