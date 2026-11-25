@@ -22,7 +22,8 @@ public class RenderProbe : ModuleRules
 			"Json",
 			"JsonUtilities",
 			"MaterialEditor",
-			"RHI"
+			"RHI",
+			"ScreenShotComparisonTools"
 		});
 
 		if (Target.Configuration != UnrealTargetConfiguration.Test && Target.Configuration != UnrealTargetConfiguration.Shipping)

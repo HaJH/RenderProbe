@@ -86,7 +86,7 @@ struct RENDERPROBE_API FRenderProbeCompareResult
 	UPROPERTY(EditAnywhere, Category = "RenderProbe", meta = (ToolTip = "Largest per-pixel difference inside diffBounds, from 0 to 1."))
 	TOptional<double> MaxLocalDifference;
 
-	UPROPERTY(EditAnywhere, Category = "RenderProbe", meta = (ToolTip = "Bounding box in pixels of the differing pixels, as {min, max}. Absent when no pixel differs."))
+	UPROPERTY(EditAnywhere, Category = "RenderProbe", meta = (ToolTip = "Bounding box in pixels of the differing pixels, as {min, max} with max exclusive. Absent when no pixel differs or the difference image could not be written."))
 	TOptional<FIntRect> DiffBounds;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RenderProbe", meta = (ToolTip = "Path of the difference image, <outputDir>/diff/<compare>__<camera>.png. Empty when no pixel differs."))

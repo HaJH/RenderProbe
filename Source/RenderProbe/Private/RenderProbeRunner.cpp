@@ -11,6 +11,7 @@
 #include "Engine/TextureCube.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "MaterialDomain.h"
 #include "MaterialShared.h"
 #include "Materials/Material.h"
@@ -18,6 +19,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Optional.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "RenderProbeComparison.h"
 #include "RenderProbeDiagnostic.h"
 #include "RenderProbeJob.h"
 #include "RenderProbeJobValidation.h"
@@ -32,11 +35,76 @@ namespace RenderProbeRunnerLocal
 {
 	static constexpr TCHAR ObjectNameDelimiter = TEXT('.');
 	static constexpr const TCHAR* WriteResultStep = TEXT("writing result.json");
+	static constexpr const TCHAR* RepeatCapturePrefix = TEXT("RenderProbeRepeat-");
+	static constexpr const TCHAR* RepeatCaptureExtension = TEXT(".png");
 
-	static FRenderProbeDiagnostic MakeOutputFailed(const FString& Path, const FString& FailedStep)
+	static TSet<FString> CollectComparedItemNames(const FRenderProbeJob& Job)
 	{
-		return FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::OutputFailed, FString(),
-			FString::Printf(TEXT("%s failed for '%s'"), *FailedStep, *Path));
+		TSet<FString> Names;
+		for (const FRenderProbeCompare& Compare : Job.Compare)
+		{
+			Names.Add(Compare.A);
+			Names.Add(Compare.B);
+		}
+		return Names;
+	}
+
+	static FString FindCapture(const FRenderProbeResult& Result, const FString& ItemName, const FString& CameraName)
+	{
+		const FRenderProbeItemResult* Item = Result.Items.FindByPredicate([&ItemName](const FRenderProbeItemResult& Candidate)
+		{
+			return Candidate.Name.Equals(ItemName, ESearchCase::CaseSensitive);
+		});
+		const FString* Path = Item ? Item->Images.Find(CameraName) : nullptr;
+		return Path ? *Path : FString();
+	}
+
+	static FString FindRepeat(const TMap<FString, FString>& RepeatPathsByCapture, const FString& CapturePath)
+	{
+		const FString* Path = CapturePath.IsEmpty() ? nullptr : RepeatPathsByCapture.Find(CapturePath);
+		return Path ? *Path : FString();
+	}
+
+	static void AddSubjectDiagnostic(const FRenderProbeSubjectDiagnostic& SubjectDiagnostic, FRenderProbeResult& OutResult)
+	{
+		FRenderProbeItemResult* Item = OutResult.Items.FindByPredicate([&SubjectDiagnostic](const FRenderProbeItemResult& Candidate)
+		{
+			return Candidate.Name.Equals(SubjectDiagnostic.Subject, ESearchCase::CaseSensitive);
+		});
+		check(Item);
+		Item->Diagnostics.Add(SubjectDiagnostic.Diagnostic);
+	}
+
+	static void CompareCaptures(const FRenderProbeJob& Job, const TMap<FString, FString>& RepeatPathsByCapture, FRenderProbeResult& OutResult)
+	{
+		for (const FRenderProbeCompare& Compare : Job.Compare)
+		{
+			for (const FRenderProbeCamera& Camera : Job.Cameras)
+			{
+				FRenderProbeComparisonCaptures Captures;
+				Captures.A = FindCapture(OutResult, Compare.A, Camera.Name);
+				Captures.ARepeat = FindRepeat(RepeatPathsByCapture, Captures.A);
+				Captures.B = FindCapture(OutResult, Compare.B, Camera.Name);
+				Captures.BRepeat = FindRepeat(RepeatPathsByCapture, Captures.B);
+
+				FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(Compare, Camera.Name, Captures,
+					RenderProbeOutputPaths::DiffPath(Job.OutputDir, Compare.Name, Camera.Name));
+				for (const FRenderProbeSubjectDiagnostic& SubjectDiagnostic : Outcome.SubjectDiagnostics)
+				{
+					AddSubjectDiagnostic(SubjectDiagnostic, OutResult);
+				}
+				OutResult.Diagnostics.Append(MoveTemp(Outcome.JobDiagnostics));
+				OutResult.Compare.Add(MoveTemp(Outcome.Result));
+			}
+		}
+	}
+
+	static void DeleteRepeatCaptures(const TMap<FString, FString>& RepeatPathsByCapture)
+	{
+		for (const TPair<FString, FString>& Repeat : RepeatPathsByCapture)
+		{
+			IFileManager::Get().Delete(*Repeat.Value);
+		}
 	}
 
 	static FString ToObjectPath(const FString& Path)
@@ -183,10 +251,13 @@ FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
 	}
 	const TSet<const FMaterialResource*> StillCompiling = RenderProbeMaterialStats::WaitForCompilation(Resources, Job.WaitTimeoutSeconds);
 
+	TMap<FString, FString> RepeatPathsByCapture;
 	if (Settings)
 	{
-		CaptureItems(Job, *Settings, StageAssets, Plans, StillCompiling, Result);
+		CaptureItems(Job, *Settings, StageAssets, Plans, StillCompiling, RepeatPathsByCapture, Result);
 	}
+	RenderProbeRunnerLocal::CompareCaptures(Job, RepeatPathsByCapture, Result);
+	RenderProbeRunnerLocal::DeleteRepeatCaptures(RepeatPathsByCapture);
 
 	for (int32 PlanIndex = 0; PlanIndex < Plans.Num(); ++PlanIndex)
 	{
@@ -310,7 +381,7 @@ FRenderProbeStageAssets URenderProbeRunner::ResolveStageAssets(const FRenderProb
 }
 
 void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderProbeProfileSettings& Settings, const FRenderProbeStageAssets& Assets,
-	const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, FRenderProbeResult& OutResult)
+	const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, TMap<FString, FString>& OutRepeatPathsByCapture, FRenderProbeResult& OutResult)
 {
 	const bool bAnyMesh = Algo::AnyOf(Plans, [](const FItemPlan& Plan) { return Plan.Mesh != nullptr; });
 	if (!bAnyMesh || Job.Cameras.IsEmpty())
@@ -325,6 +396,7 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 			FString::Printf(TEXT("environment level '%s' could not be streamed"), *FailedLevel)));
 	}
 
+	const TSet<FString> ComparedItemNames = RenderProbeRunnerLocal::CollectComparedItemNames(Job);
 	for (int32 PlanIndex = 0; PlanIndex < Plans.Num(); ++PlanIndex)
 	{
 		const FItemPlan& Plan = Plans[PlanIndex];
@@ -332,6 +404,7 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 		{
 			continue;
 		}
+		const bool bCompared = ComparedItemNames.Contains(Plan.Item->Name);
 		FRenderProbeItemResult& ItemResult = OutResult.Items[PlanIndex];
 		if (RenderProbeRunnerLocal::ReportStillCompiling(Plan.RenderMaterials, StillCompiling, ItemResult))
 		{
@@ -344,13 +417,26 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 		{
 			const FString CapturePath = RenderProbeOutputPaths::CapturePath(Job.OutputDir, Plan.Item->Name, Camera.Name);
 			FString FailedStep;
-			if (Stage.Capture(*Subject, Camera, CapturePath, FailedStep))
+			if (!Stage.Capture(*Subject, Camera, CapturePath, FailedStep))
 			{
-				ItemResult.Images.Add(Camera.Name, CapturePath);
+				ItemResult.Diagnostics.Add(FRenderProbeDiagnostic::MakeOutputFailed(CapturePath, FailedStep));
+				continue;
+			}
+			ItemResult.Images.Add(Camera.Name, CapturePath);
+			if (!bCompared)
+			{
+				continue;
+			}
+
+			const FString RepeatPath = FPaths::CreateTempFilename(FPlatformProcess::UserTempDir(),
+				RenderProbeRunnerLocal::RepeatCapturePrefix, RenderProbeRunnerLocal::RepeatCaptureExtension);
+			if (Stage.Capture(*Subject, Camera, RepeatPath, FailedStep))
+			{
+				OutRepeatPathsByCapture.Add(CapturePath, RepeatPath);
 			}
 			else
 			{
-				ItemResult.Diagnostics.Add(RenderProbeRunnerLocal::MakeOutputFailed(CapturePath, FailedStep));
+				ItemResult.Diagnostics.Add(FRenderProbeDiagnostic::MakeOutputFailed(RepeatPath, FailedStep));
 			}
 		}
 		Stage.RemoveSubject(*Subject);
@@ -492,7 +578,7 @@ FRenderProbeResult URenderProbeRunner::Finish(const FString& OutputDir, FRenderP
 		IFileManager::Get().MakeDirectory(*OutputDir, true);
 		if (!FFileHelper::SaveStringToFile(RenderProbeJson::ResultToJsonString(Result), *ResultPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 		{
-			Result.Diagnostics.Add(RenderProbeRunnerLocal::MakeOutputFailed(ResultPath, RenderProbeRunnerLocal::WriteResultStep));
+			Result.Diagnostics.Add(FRenderProbeDiagnostic::MakeOutputFailed(ResultPath, RenderProbeRunnerLocal::WriteResultStep));
 			Result.bOk = false;
 		}
 	}

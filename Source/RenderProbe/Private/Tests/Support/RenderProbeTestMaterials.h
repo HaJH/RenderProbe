@@ -17,6 +17,8 @@ namespace RenderProbeTestMaterials
 
 	UMaterial* CreateMaterialMissingTexture();
 
+	UMaterial* CreateConstantColorMaterial(const FLinearColor& Color);
+
 	UMaterial* CreateTimeColorMaterial();
 
 	UMaterial* CreateSkyAtmosphereLightDirectionMaterial();

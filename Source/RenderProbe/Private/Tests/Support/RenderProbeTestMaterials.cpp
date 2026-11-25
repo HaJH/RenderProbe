@@ -6,6 +6,7 @@
 
 #include "Engine/EngineTypes.h"
 #include "MaterialEditingLibrary.h"
+#include "Math/Color.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionAdd.h"
@@ -91,6 +92,18 @@ namespace RenderProbeTestMaterials
 	{
 		UMaterial* Material = NewTransient<UMaterial>(BaseName);
 		Material->SetShadingModel(MSM_Unlit);
+		return Material;
+	}
+
+	UMaterial* CreateConstantColorMaterial(const FLinearColor& Color)
+	{
+		UMaterial* Material = NewUnlitMaterial(TEXT("M_RenderProbeTestConstantColor"));
+
+		UMaterialExpressionConstant3Vector* Constant = AddExpression<UMaterialExpressionConstant3Vector>(Material);
+		Constant->Constant = Color;
+		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Constant, FString(), MP_EmissiveColor));
+
+		UMaterialEditingLibrary::RecompileMaterial(Material);
 		return Material;
 	}
 
