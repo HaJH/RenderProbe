@@ -37,6 +37,7 @@ static constexpr const TCHAR* SourceJobJson = TEXT(R"json({
 })json");
 
 static constexpr double Tolerance = 1e-4;
+static constexpr float FloatTolerance = static_cast<float>(Tolerance);
 
 TEST_CLASS(RenderProbeJobJson, "RenderProbe.Integration.Job")
 {
@@ -55,7 +56,7 @@ TEST_CLASS(RenderProbeJobJson, "RenderProbe.Integration.Job")
 		ASSERT_THAT(IsTrue(RoundTripped.Profile.Asset.IsEmpty()));
 		ASSERT_THAT(IsTrue(RoundTripped.Profile.Settings.IsSet()));
 		const FRenderProbeProfileSettings& Settings = RoundTripped.Profile.Settings.GetValue();
-		ASSERT_THAT(IsNear(4.5f, Settings.Rig.DirectionalLight.Intensity, Tolerance));
+		ASSERT_THAT(IsNear(4.5f, Settings.Rig.DirectionalLight.Intensity, FloatTolerance));
 		ASSERT_THAT(IsTrue(Settings.Rig.DirectionalLight.bAtmosphereSunLight));
 		ASSERT_THAT(IsTrue(Settings.Lumen.bEnabled));
 		ASSERT_THAT(AreEqual(3, Settings.Lumen.ConvergenceCaptures));
@@ -67,7 +68,7 @@ TEST_CLASS(RenderProbeJobJson, "RenderProbe.Integration.Job")
 		ASSERT_THAT(AreEqual(2, RoundTripped.Cameras.Num()));
 		ASSERT_THAT(AreEqual(FString(TEXT("front")), RoundTripped.Cameras[0].Name));
 		ASSERT_THAT(IsTrue(RoundTripped.Cameras[0].Mode == ERenderProbeCameraMode::FitBounds));
-		ASSERT_THAT(IsNear(15.f, RoundTripped.Cameras[0].Yaw, Tolerance));
+		ASSERT_THAT(IsNear(15.f, RoundTripped.Cameras[0].Yaw, FloatTolerance));
 		ASSERT_THAT(IsTrue(RoundTripped.Cameras[1].Mode == ERenderProbeCameraMode::Explicit));
 		ASSERT_THAT(IsNear(500.0, RoundTripped.Cameras[1].Location.Z, Tolerance));
 		ASSERT_THAT(IsNear(-90.0, RoundTripped.Cameras[1].Rotation.Pitch, Tolerance));
