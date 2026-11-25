@@ -12,6 +12,7 @@
 namespace RenderProbeComparisonLocal
 {
 	static constexpr const TCHAR* WriteDeltaStep = TEXT("writing the difference image");
+	static constexpr const TCHAR* ReadCaptureStep = TEXT("reading the capture");
 	static constexpr double FullDifference = 1.0;
 	static constexpr double MaxChannelValue = 255.0;
 
@@ -29,12 +30,27 @@ namespace RenderProbeComparisonLocal
 		return !Path.IsEmpty() && OutImage.LoadFile(Path, Error);
 	}
 
-	static bool LoadCaptures(const FRenderProbeComparisonCaptures& Captures, FCaptureImages& OutImages)
+	static bool LoadCapture(const FString& Path, FComparableImage& OutImage, TArray<FRenderProbeDiagnostic>& OutDiagnostics)
 	{
-		return LoadImage(Captures.A, OutImages.A)
-			&& LoadImage(Captures.ARepeat, OutImages.ARepeat)
-			&& LoadImage(Captures.B, OutImages.B)
-			&& LoadImage(Captures.BRepeat, OutImages.BRepeat);
+		if (Path.IsEmpty())
+		{
+			return false;
+		}
+		if (LoadImage(Path, OutImage))
+		{
+			return true;
+		}
+		OutDiagnostics.Add(FRenderProbeDiagnostic::MakeOutputFailed(Path, ReadCaptureStep));
+		return false;
+	}
+
+	static bool LoadCaptures(const FRenderProbeComparisonCaptures& Captures, FCaptureImages& OutImages, TArray<FRenderProbeDiagnostic>& OutDiagnostics)
+	{
+		const bool bLoadedA = LoadCapture(Captures.A, OutImages.A, OutDiagnostics);
+		const bool bLoadedARepeat = LoadCapture(Captures.ARepeat, OutImages.ARepeat, OutDiagnostics);
+		const bool bLoadedB = LoadCapture(Captures.B, OutImages.B, OutDiagnostics);
+		const bool bLoadedBRepeat = LoadCapture(Captures.BRepeat, OutImages.BRepeat, OutDiagnostics);
+		return bLoadedA && bLoadedARepeat && bLoadedB && bLoadedBRepeat;
 	}
 
 	static FImageComparisonResult CompareImages(const FString& PathA, const FString& PathB, const FComparableImage& A, const FComparableImage& B,
@@ -147,7 +163,7 @@ namespace RenderProbeComparison
 		Outcome.Result.Camera = CameraName;
 
 		FCaptureImages Images;
-		if (!LoadCaptures(Captures, Images))
+		if (!LoadCaptures(Captures, Images, Outcome.JobDiagnostics))
 		{
 			return Outcome;
 		}

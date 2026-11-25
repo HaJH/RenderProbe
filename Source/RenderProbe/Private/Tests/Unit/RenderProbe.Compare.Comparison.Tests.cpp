@@ -6,6 +6,7 @@
 #include "ImageUtils.h"
 #include "Math/Color.h"
 #include "Math/IntRect.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "RenderProbeComparison.h"
 #include "RenderProbeDiagnostic.h"
@@ -41,6 +42,9 @@ static constexpr const TCHAR* CaptureBFile = TEXT("b.png");
 static constexpr const TCHAR* RepeatBFile = TEXT("b_repeat.png");
 static constexpr const TCHAR* SlightRepeatAFile = TEXT("a_repeat_slight.png");
 static constexpr const TCHAR* WriteDeltaStep = TEXT("writing the difference image");
+static constexpr const TCHAR* CorruptRepeatBFile = TEXT("b_repeat_corrupt.png");
+static constexpr const TCHAR* CorruptCaptureContent = TEXT("not an image");
+static constexpr const TCHAR* ReadCaptureStep = TEXT("reading the capture");
 
 static bool IsSameTolerance(const FImageTolerance& Actual, const FImageTolerance& Expected)
 {
@@ -115,12 +119,12 @@ TEST_CLASS(RenderProbeComparisonJudge, "RenderProbe.Unit.Compare")
 		return Path;
 	}
 
-	FString DeltaPath() const
+	FString MakeDeltaPath() const
 	{
 		return FPaths::Combine(OutputDir.Get(), DeltaFileName);
 	}
 
-	FRenderProbeComparisonCaptures DeterministicCaptures(const FImage& A, const FImage& B)
+	FRenderProbeComparisonCaptures SaveDeterministicCaptures(const FImage& A, const FImage& B)
 	{
 		FRenderProbeComparisonCaptures Captures;
 		Captures.A = SaveImage(CaptureAFile, A);
@@ -132,42 +136,42 @@ TEST_CLASS(RenderProbeComparisonJudge, "RenderProbe.Unit.Compare")
 
 	TEST_METHOD(IdenticalCapturesAreSimilarWithoutDifferenceImage)
 	{
-		const FRenderProbeComparisonCaptures Captures = DeterministicCaptures(MakeImageWithBlock(BlockGray), MakeImageWithBlock(BlockGray));
+		const FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeImageWithBlock(BlockGray), MakeImageWithBlock(BlockGray));
 
-		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, DeltaPath());
+		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, MakeDeltaPath());
 
 		ASSERT_THAT(IsTrue(Outcome.Result.Similar.IsSet() && Outcome.Result.Similar.GetValue()));
 		ASSERT_THAT(IsTrue(Outcome.Result.GlobalDifference.IsSet()));
 		ASSERT_THAT(IsNear(0.0, Outcome.Result.GlobalDifference.GetValue(), DifferenceTolerance));
 		ASSERT_THAT(IsFalse(Outcome.Result.DiffBounds.IsSet()));
 		ASSERT_THAT(IsTrue(Outcome.Result.DeltaImage.IsEmpty()));
-		ASSERT_THAT(IsFalse(IFileManager::Get().FileExists(*DeltaPath())));
+		ASSERT_THAT(IsFalse(IFileManager::Get().FileExists(*MakeDeltaPath())));
 		ASSERT_THAT(IsTrue(Outcome.SubjectDiagnostics.IsEmpty()));
 		ASSERT_THAT(IsTrue(Outcome.JobDiagnostics.IsEmpty()));
 	}
 
 	TEST_METHOD(DifferingBlockGivesItsBoundsAndLargestDifference)
 	{
-		const FRenderProbeComparisonCaptures Captures = DeterministicCaptures(MakeBlackImage(), MakeImageWithBlock(BlockGray));
+		const FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeBlackImage(), MakeImageWithBlock(BlockGray));
 
-		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, DeltaPath());
+		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, MakeDeltaPath());
 
 		ASSERT_THAT(IsTrue(Outcome.Result.Similar.IsSet() && !Outcome.Result.Similar.GetValue()));
 		ASSERT_THAT(IsNear(static_cast<double>(BlockPixelCount) / ImagePixelCount, Outcome.Result.GlobalDifference.Get(-1.0), DifferenceTolerance));
 		ASSERT_THAT(IsTrue(Outcome.Result.DiffBounds.IsSet()));
 		ASSERT_THAT(IsTrue(Outcome.Result.DiffBounds.GetValue() == FIntRect(BlockMinX, BlockMinY, BlockMaxX, BlockMaxY)));
 		ASSERT_THAT(IsNear(BlockGray / static_cast<double>(MAX_uint8), Outcome.Result.MaxLocalDifference.Get(-1.0), DifferenceTolerance));
-		ASSERT_THAT(AreEqual(DeltaPath(), Outcome.Result.DeltaImage));
-		ASSERT_THAT(IsTrue(IFileManager::Get().FileExists(*DeltaPath())));
+		ASSERT_THAT(AreEqual(MakeDeltaPath(), Outcome.Result.DeltaImage));
+		ASSERT_THAT(IsTrue(IFileManager::Get().FileExists(*MakeDeltaPath())));
 		ASSERT_THAT(IsTrue(Outcome.JobDiagnostics.IsEmpty()));
 	}
 
 	TEST_METHOD(ToleranceDecidesWhetherASlightDifferenceCounts)
 	{
-		const FRenderProbeComparisonCaptures Captures = DeterministicCaptures(MakeBlackImage(), MakeImageWithBlock(SlightGray));
+		const FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeBlackImage(), MakeImageWithBlock(SlightGray));
 
-		const FRenderProbeComparisonOutcome Strict = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, DeltaPath());
-		const FRenderProbeComparisonOutcome Loose = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, DeltaPath());
+		const FRenderProbeComparisonOutcome Strict = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, MakeDeltaPath());
+		const FRenderProbeComparisonOutcome Loose = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, MakeDeltaPath());
 
 		ASSERT_THAT(IsTrue(Strict.Result.Similar.IsSet() && !Strict.Result.Similar.GetValue()));
 		ASSERT_THAT(IsTrue(Strict.Result.DiffBounds.IsSet()));
@@ -177,11 +181,11 @@ TEST_CLASS(RenderProbeComparisonJudge, "RenderProbe.Unit.Compare")
 
 	TEST_METHOD(UnrepeatableCaptureWithholdsVerdictOnlyUnderStrictTolerance)
 	{
-		FRenderProbeComparisonCaptures Captures = DeterministicCaptures(MakeBlackImage(), MakeBlackImage());
+		FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeBlackImage(), MakeBlackImage());
 		Captures.ARepeat = SaveImage(SlightRepeatAFile, MakeImageWithBlock(SlightGray));
 
-		const FRenderProbeComparisonOutcome Strict = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, DeltaPath());
-		const FRenderProbeComparisonOutcome Loose = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, DeltaPath());
+		const FRenderProbeComparisonOutcome Strict = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, MakeDeltaPath());
+		const FRenderProbeComparisonOutcome Loose = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, MakeDeltaPath());
 
 		ASSERT_THAT(IsFalse(Strict.Result.Similar.IsSet()));
 		ASSERT_THAT(IsFalse(Strict.Result.GlobalDifference.IsSet()));
@@ -197,10 +201,10 @@ TEST_CLASS(RenderProbeComparisonJudge, "RenderProbe.Unit.Compare")
 
 	TEST_METHOD(MissingCaptureWithholdsVerdictWithoutDiagnostic)
 	{
-		FRenderProbeComparisonCaptures Captures = DeterministicCaptures(MakeBlackImage(), MakeBlackImage());
+		FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeBlackImage(), MakeBlackImage());
 		Captures.BRepeat.Reset();
 
-		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, DeltaPath());
+		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, MakeDeltaPath());
 
 		ASSERT_THAT(IsFalse(Outcome.Result.Similar.IsSet()));
 		ASSERT_THAT(AreEqual(FString(CompareName), Outcome.Result.Name));
@@ -209,18 +213,35 @@ TEST_CLASS(RenderProbeComparisonJudge, "RenderProbe.Unit.Compare")
 		ASSERT_THAT(IsTrue(Outcome.JobDiagnostics.IsEmpty()));
 	}
 
+	TEST_METHOD(UndecodableCaptureWithholdsVerdictAndReportsOutputFailed)
+	{
+		FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeBlackImage(), MakeBlackImage());
+		Captures.BRepeat = FPaths::Combine(OutputDir.Get(), CorruptRepeatBFile);
+		ASSERT_THAT(IsTrue(FFileHelper::SaveStringToFile(CorruptCaptureContent, *Captures.BRepeat)));
+
+		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Low), CameraName, Captures, MakeDeltaPath());
+
+		ASSERT_THAT(IsFalse(Outcome.Result.Similar.IsSet()));
+		ASSERT_THAT(IsTrue(Outcome.SubjectDiagnostics.IsEmpty()));
+		ASSERT_THAT(AreEqual(1, Outcome.JobDiagnostics.Num()));
+		const FRenderProbeDiagnostic& Reported = Outcome.JobDiagnostics[0];
+		ASSERT_THAT(IsTrue(Reported.Kind == ERenderProbeDiagnosticKind::OutputFailed));
+		ASSERT_THAT(IsTrue(Reported.Detail.Contains(ReadCaptureStep, ESearchCase::CaseSensitive)));
+		ASSERT_THAT(IsTrue(Reported.Detail.Contains(Captures.BRepeat, ESearchCase::CaseSensitive)));
+	}
+
 	TEST_METHOD(UnwritableDifferenceImageReportsOutputFailed)
 	{
-		const FRenderProbeComparisonCaptures Captures = DeterministicCaptures(MakeBlackImage(), MakeImageWithBlock(BlockGray));
-		ASSERT_THAT(IsTrue(IFileManager::Get().MakeDirectory(*DeltaPath(), true)));
+		const FRenderProbeComparisonCaptures Captures = SaveDeterministicCaptures(MakeBlackImage(), MakeImageWithBlock(BlockGray));
+		ASSERT_THAT(IsTrue(IFileManager::Get().MakeDirectory(*MakeDeltaPath(), true)));
 
-		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, DeltaPath());
+		const FRenderProbeComparisonOutcome Outcome = RenderProbeComparison::Judge(MakeCompare(ERenderProbeTolerance::Zero), CameraName, Captures, MakeDeltaPath());
 
 		ASSERT_THAT(AreEqual(1, Outcome.JobDiagnostics.Num()));
 		const FRenderProbeDiagnostic& Reported = Outcome.JobDiagnostics[0];
 		ASSERT_THAT(IsTrue(Reported.Kind == ERenderProbeDiagnosticKind::OutputFailed));
 		ASSERT_THAT(IsTrue(Reported.Detail.Contains(WriteDeltaStep, ESearchCase::CaseSensitive)));
-		ASSERT_THAT(IsTrue(Reported.Detail.Contains(DeltaPath(), ESearchCase::CaseSensitive)));
+		ASSERT_THAT(IsTrue(Reported.Detail.Contains(MakeDeltaPath(), ESearchCase::CaseSensitive)));
 		ASSERT_THAT(IsTrue(Outcome.Result.DeltaImage.IsEmpty()));
 	}
 };
