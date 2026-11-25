@@ -1,0 +1,36 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "RenderProbe",
+	"Description": "Renders meshes and materials under fixed conditions in an isolated preview world and returns images, material statistics and comparison results as files. Built primarily for AI agents.",
+	"Category": "Rendering",
+	"CreatedBy": "Jeonghyeon Ha",
+	"CreatedByURL": "https://github.com/HaJH/RenderProbe",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "RenderProbe",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RenderProbeToolset",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ToolsetRegistry",
+			"Enabled": true,
+			"Optional": true
+		}
+	]
+}
