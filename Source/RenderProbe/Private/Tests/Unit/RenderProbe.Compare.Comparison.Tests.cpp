@@ -45,6 +45,7 @@ static constexpr const TCHAR* WriteDeltaStep = TEXT("writing the difference imag
 static constexpr const TCHAR* CorruptRepeatBFile = TEXT("b_repeat_corrupt.png");
 static constexpr const TCHAR* CorruptCaptureContent = TEXT("not an image");
 static constexpr const TCHAR* ReadCaptureStep = TEXT("reading the capture");
+static constexpr TCHAR SyntheticCaptureWriteFailedFormat[] = TEXT("could not write the synthetic capture '%s'");
 
 static bool IsSameTolerance(const FImageTolerance& Actual, const FImageTolerance& Expected)
 {
@@ -114,7 +115,7 @@ TEST_CLASS(RenderProbeComparisonJudge, "RenderProbe.Unit.Compare")
 		const FString Path = FPaths::Combine(OutputDir.Get(), FileName);
 		if (!FImageUtils::SaveImageByExtension(*Path, Image))
 		{
-			TestRunner->AddError(FString::Printf(TEXT("could not write the synthetic capture '%s'"), *Path));
+			TestRunner->AddError(FString::Printf(SyntheticCaptureWriteFailedFormat, *Path));
 		}
 		return Path;
 	}

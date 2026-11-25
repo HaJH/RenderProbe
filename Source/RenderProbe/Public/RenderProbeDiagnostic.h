@@ -36,7 +36,8 @@ struct RENDERPROBE_API FRenderProbeDiagnostic
 
 	static FRenderProbeDiagnostic MakeOutputFailed(const FString& Path, const FString& FailedStep)
 	{
-		return Make(ERenderProbeDiagnosticKind::OutputFailed, FString(), FString::Printf(TEXT("%s failed for '%s'"), *FailedStep, *Path));
+		static constexpr TCHAR OutputFailedDetailFormat[] = TEXT("%s failed for '%s'");
+		return Make(ERenderProbeDiagnosticKind::OutputFailed, FString(), FString::Printf(OutputFailedDetailFormat, *FailedStep, *Path));
 	}
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RenderProbe", meta = (ToolTip = "Diagnostic kind."))

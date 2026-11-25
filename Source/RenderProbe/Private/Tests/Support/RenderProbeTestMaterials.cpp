@@ -28,6 +28,7 @@ namespace RenderProbeTestMaterials
 	static constexpr const TCHAR* SwitchTrueInputName = TEXT("True");
 	static constexpr const TCHAR* SwitchFalseInputName = TEXT("False");
 	static constexpr const TCHAR* BinaryInputAName = TEXT("A");
+	static constexpr const TCHAR* ConstantColorMaterialName = TEXT("M_RenderProbeTestConstantColor");
 	static constexpr const TCHAR* SkyAtmosphereLightDirectionClassPath = TEXT("/Script/Engine.MaterialExpressionSkyAtmosphereLightDirection");
 	static constexpr float TimeColorOffset = 0.25f;
 	static constexpr float SignedToUnitScale = 0.5f;
@@ -97,7 +98,7 @@ namespace RenderProbeTestMaterials
 
 	UMaterial* CreateConstantColorMaterial(const FLinearColor& Color)
 	{
-		UMaterial* Material = NewUnlitMaterial(TEXT("M_RenderProbeTestConstantColor"));
+		UMaterial* Material = NewUnlitMaterial(ConstantColorMaterialName);
 
 		UMaterialExpressionConstant3Vector* Constant = AddExpression<UMaterialExpressionConstant3Vector>(Material);
 		Constant->Constant = Color;

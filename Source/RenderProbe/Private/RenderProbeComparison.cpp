@@ -13,6 +13,8 @@ namespace RenderProbeComparisonLocal
 {
 	static constexpr const TCHAR* WriteDeltaStep = TEXT("writing the difference image");
 	static constexpr const TCHAR* ReadCaptureStep = TEXT("reading the capture");
+	static constexpr TCHAR NondeterministicDetailFormat[] = TEXT("two captures of '%s' from camera '%s' differ under the tolerance of compare '%s'");
+	static constexpr TCHAR UnhandledToleranceFormat[] = TEXT("Unhandled ERenderProbeTolerance value %d");
 	static constexpr double FullDifference = 1.0;
 	static constexpr double MaxChannelValue = 255.0;
 
@@ -65,8 +67,7 @@ namespace RenderProbeComparisonLocal
 
 	static FString MakeNondeterministicDetail(const FString& Subject, const FRenderProbeCompare& Compare, const FString& CameraName)
 	{
-		return FString::Printf(TEXT("two captures of '%s' from camera '%s' differ under the tolerance of compare '%s'"),
-			*Subject, *CameraName, *Compare.Name);
+		return FString::Printf(NondeterministicDetailFormat, *Subject, *CameraName, *Compare.Name);
 	}
 
 	static bool IsDeltaErrorPixel(const FColor& Pixel)
@@ -148,7 +149,7 @@ namespace RenderProbeComparison
 		case ERenderProbeTolerance::Colors:
 			return FImageTolerance::DefaultIgnoreColors;
 		}
-		checkf(false, TEXT("Unhandled ERenderProbeTolerance value %d"), static_cast<int32>(Tolerance));
+		checkf(false, RenderProbeComparisonLocal::UnhandledToleranceFormat, static_cast<int32>(Tolerance));
 		return FImageTolerance::DefaultIgnoreNothing;
 	}
 
