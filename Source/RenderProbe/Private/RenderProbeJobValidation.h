@@ -9,6 +9,5 @@ struct FRenderProbeJob;
 
 namespace RenderProbeJobValidation
 {
-	/** Returns one InvalidJob diagnostic per rule the job breaks; empty when the job may run. */
 	TArray<FRenderProbeDiagnostic> Validate(const FRenderProbeJob& Job);
 }

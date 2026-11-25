@@ -1,10 +1,13 @@
 // Copyright 2026 Jeonghyeon Ha. All Rights Reserved.
 
 #include "Algo/AnyOf.h"
+#include "HAL/FileManager.h"
 #include "ImageCore.h"
 #include "ImageUtils.h"
 #include "Materials/Material.h"
+#include "RenderProbeDiagnostic.h"
 #include "RenderProbeJob.h"
+#include "RenderProbeOutputPaths.h"
 #include "RenderProbeResult.h"
 #include "RenderProbeRunner.h"
 #include "Tests/Support/RenderProbeTestMaterials.h"
@@ -23,6 +26,7 @@ static constexpr const TCHAR* CubeMeshPath = TEXT("/Engine/BasicShapes/Cube.Cube
 static constexpr const TCHAR* SubjectName = TEXT("cube");
 static constexpr const TCHAR* CameraName = TEXT("front");
 static constexpr const TCHAR* FirstSlotKey = TEXT("0");
+static constexpr const TCHAR* WritePngStep = TEXT("writing the PNG");
 static constexpr const TCHAR* MaterialCompileFailureLog = TEXT("Failed to compile Material");
 static constexpr const TCHAR* MissingTextureLog = TEXT("Missing input texture");
 static constexpr int32 IgnoreAnyOccurrences = -1;
@@ -92,6 +96,29 @@ TEST_CLASS(RenderProbeCapture, "RenderProbe.Integration.Capture")
 		ASSERT_THAT(IsTrue(FImageUtils::LoadImage(**CapturePath, Image)));
 		ASSERT_THAT(AreEqual(SmallResolutionX, Image.SizeX));
 		ASSERT_THAT(AreEqual(SmallResolutionY, Image.SizeY));
+	}
+
+	TEST_METHOD(UnwritableCapturePathReportsOutputFailedWithoutImage)
+	{
+		if (!RenderProbeTestRhi::CanRender(*TestRunner))
+		{
+			return;
+		}
+		const FString CapturePath = RenderProbeOutputPaths::CapturePath(FirstOutputDir.Get(), SubjectName, CameraName);
+		ASSERT_THAT(IsTrue(IFileManager::Get().MakeDirectory(*CapturePath, true)));
+
+		const FRenderProbeResult Result = RunJob(MakeCubeJob(FirstOutputDir.Get(), nullptr));
+
+		ASSERT_THAT(IsFalse(Result.bOk));
+		ASSERT_THAT(AreEqual(1, Result.Items.Num()));
+		ASSERT_THAT(IsNull(FindCapture(Result)));
+		const bool bReportedOutputFailed = Algo::AnyOf(Result.Items[0].Diagnostics, [&CapturePath](const FRenderProbeDiagnostic& Diagnostic)
+		{
+			return Diagnostic.Kind == ERenderProbeDiagnosticKind::OutputFailed
+				&& Diagnostic.Detail.Contains(WritePngStep, ESearchCase::CaseSensitive)
+				&& Diagnostic.Detail.Contains(CapturePath, ESearchCase::CaseSensitive);
+		});
+		ASSERT_THAT(IsTrue(bReportedOutputFailed));
 	}
 
 	TEST_METHOD(SameJobTwiceWritesSamePixelsWithTimeDrivenMaterial)

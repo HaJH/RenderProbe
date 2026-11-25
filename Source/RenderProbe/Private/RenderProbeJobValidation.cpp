@@ -7,6 +7,9 @@
 
 namespace RenderProbeJobValidation
 {
+	static constexpr double MinFitBoundsFov = 0.0;
+	static constexpr double MaxFitBoundsFov = 180.0;
+
 	static void AddInvalidJob(TArray<FRenderProbeDiagnostic>& OutDiagnostics, FString Detail)
 	{
 		OutDiagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::InvalidJob, FString(), MoveTemp(Detail)));
@@ -76,6 +79,26 @@ namespace RenderProbeJobValidation
 		else if (!bHasAsset && !bHasSettings)
 		{
 			AddInvalidJob(OutDiagnostics, TEXT("profile has neither asset nor settings; give exactly one"));
+		}
+	}
+
+	static void ValidateResolution(const FIntPoint& Resolution, TArray<FRenderProbeDiagnostic>& OutDiagnostics)
+	{
+		if (Resolution.X <= 0 || Resolution.Y <= 0)
+		{
+			AddInvalidJob(OutDiagnostics, FString::Printf(TEXT("resolution %dx%d is not positive on both axes"), Resolution.X, Resolution.Y));
+		}
+	}
+
+	static void ValidateCameraFovs(const TArray<FRenderProbeCamera>& Cameras, TArray<FRenderProbeDiagnostic>& OutDiagnostics)
+	{
+		for (const FRenderProbeCamera& Camera : Cameras)
+		{
+			if (Camera.Mode == ERenderProbeCameraMode::FitBounds && (Camera.Fov <= MinFitBoundsFov || Camera.Fov >= MaxFitBoundsFov))
+			{
+				AddInvalidJob(OutDiagnostics, FString::Printf(TEXT("camera '%s' fov %g is outside (%g, %g) for fitBounds"),
+					*Camera.Name, Camera.Fov, MinFitBoundsFov, MaxFitBoundsFov));
+			}
 		}
 	}
 
@@ -160,6 +183,8 @@ namespace RenderProbeJobValidation
 		{
 			AddInvalidJob(Diagnostics, TEXT("outputDir is empty"));
 		}
+		ValidateResolution(Job.Resolution, Diagnostics);
+		ValidateCameraFovs(Job.Cameras, Diagnostics);
 		ValidateListNames(TEXT("items"), Job.Items, Diagnostics);
 		ValidateListNames(TEXT("cameras"), Job.Cameras, Diagnostics);
 		ValidateListNames(TEXT("compare"), Job.Compare, Diagnostics);

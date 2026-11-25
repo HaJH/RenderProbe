@@ -105,7 +105,7 @@ struct RENDERPROBE_API FRenderProbeLumenSettings
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RenderProbe", meta = (ToolTip = "Whether Lumen is enabled in the preview world."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RenderProbe", meta = (ToolTip = "Whether Lumen is used for the global illumination and reflection methods that the post process settings leave unset. A method the post process sets to Lumen turns Lumen on regardless."))
 	bool bEnabled = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RenderProbe", meta = (ClampMin = "0", ToolTip = "Number of captures taken and discarded before the kept capture, so that Lumen converges."))

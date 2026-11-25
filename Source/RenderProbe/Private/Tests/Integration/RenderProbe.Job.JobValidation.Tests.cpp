@@ -18,6 +18,9 @@ namespace RenderProbeJobValidationTests
 static constexpr const TCHAR* UnloadedMeshPath = TEXT("/Engine/RenderProbeTests/NeverLoaded.NeverLoaded");
 static constexpr const TCHAR* SubjectA = TEXT("subjectA");
 static constexpr const TCHAR* SubjectB = TEXT("subjectB");
+static constexpr int32 ValidResolutionAxis = 64;
+static constexpr int32 NegativeResolutionAxis = -1;
+static constexpr float StraightAngleFov = 180.f;
 
 static FRenderProbeCamera MakeCamera(const TCHAR* Name)
 {
@@ -51,7 +54,6 @@ static FRenderProbeCompare MakeCompare(const TCHAR* Name, const TCHAR* A, const 
 	return Compare;
 }
 
-/** True when nothing ran, every diagnostic is a top-level InvalidJob, and one of them mentions DetailFragment. */
 static bool IsRejectedMentioning(const FRenderProbeResult& Result, const TCHAR* DetailFragment)
 {
 	const bool bOnlyInvalidJob = Algo::AllOf(Result.Diagnostics, [](const FRenderProbeDiagnostic& Diagnostic)
@@ -102,6 +104,32 @@ TEST_CLASS(RenderProbeJobValidation, "RenderProbe.Integration.Job")
 	{
 		Job.OutputDir.Empty();
 		ASSERT_THAT(IsTrue(IsRejectedMentioning(RunJob(), TEXT("outputDir is empty"))));
+	}
+
+	TEST_METHOD(ResolutionWithZeroAxisIsRejected)
+	{
+		Job.Resolution = FIntPoint(ValidResolutionAxis, 0);
+		ASSERT_THAT(IsTrue(IsRejectedMentioning(RunJob(), TEXT("is not positive on both axes"))));
+	}
+
+	TEST_METHOD(ResolutionWithNegativeAxisIsRejected)
+	{
+		Job.Resolution = FIntPoint(NegativeResolutionAxis, ValidResolutionAxis);
+		ASSERT_THAT(IsTrue(IsRejectedMentioning(RunJob(), TEXT("is not positive on both axes"))));
+	}
+
+	TEST_METHOD(FitBoundsCameraWithZeroFovIsRejected)
+	{
+		FRenderProbeCamera& Camera = Job.Cameras.Add_GetRef(MakeCamera(TEXT("zeroFov")));
+		Camera.Fov = 0.f;
+		ASSERT_THAT(IsTrue(IsRejectedMentioning(RunJob(), TEXT("camera 'zeroFov' fov"))));
+	}
+
+	TEST_METHOD(FitBoundsCameraWithStraightAngleFovIsRejected)
+	{
+		FRenderProbeCamera& Camera = Job.Cameras.Add_GetRef(MakeCamera(TEXT("wideFov")));
+		Camera.Fov = StraightAngleFov;
+		ASSERT_THAT(IsTrue(IsRejectedMentioning(RunJob(), TEXT("camera 'wideFov' fov"))));
 	}
 
 	TEST_METHOD(NameWithDisallowedCharacterIsRejected)

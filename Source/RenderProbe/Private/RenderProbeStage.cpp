@@ -26,29 +26,8 @@ namespace RenderProbeStageLocal
 	static constexpr int32 LevelInstanceRenameId = 1;
 	static constexpr double Half = 0.5;
 	static constexpr uint8 OpaqueAlpha = 255;
-
-	static FPostProcessSettings MakeDeterministicPostProcess(const FRenderProbeProfileSettings& Settings)
-	{
-		FPostProcessSettings PostProcess = Settings.PostProcess;
-		PostProcess.bOverride_AutoExposureMethod = true;
-		PostProcess.AutoExposureMethod = AEM_Manual;
-		if (!PostProcess.bOverride_AutoExposureApplyPhysicalCameraExposure)
-		{
-			PostProcess.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
-			PostProcess.AutoExposureApplyPhysicalCameraExposure = false;
-		}
-		if (!PostProcess.bOverride_DynamicGlobalIlluminationMethod)
-		{
-			PostProcess.bOverride_DynamicGlobalIlluminationMethod = true;
-			PostProcess.DynamicGlobalIlluminationMethod = Settings.Lumen.bEnabled ? EDynamicGlobalIlluminationMethod::Lumen : EDynamicGlobalIlluminationMethod::None;
-		}
-		if (!PostProcess.bOverride_ReflectionMethod)
-		{
-			PostProcess.bOverride_ReflectionMethod = true;
-			PostProcess.ReflectionMethod = Settings.Lumen.bEnabled ? EReflectionMethod::Lumen : EReflectionMethod::None;
-		}
-		return PostProcess;
-	}
+	static constexpr const TCHAR* ReadRenderTargetStep = TEXT("reading the render target");
+	static constexpr const TCHAR* WritePngStep = TEXT("writing the PNG");
 
 	static FTransform ToTransform(const FRenderProbeTransform& Transform)
 	{
@@ -79,8 +58,7 @@ namespace RenderProbeStageLocal
 }
 
 FRenderProbeStage::FRenderProbeStage(const FRenderProbeProfileSettings& Settings, const FRenderProbeStageAssets& Assets, const FIntPoint InResolution)
-	: PostProcess(RenderProbeStageLocal::MakeDeterministicPostProcess(Settings))
-	, Lumen(Settings.Lumen)
+	: CaptureSetup(RenderProbeCaptureSetup::Make(Settings))
 	, SubjectTransform(Settings.SubjectTransform.Rotation, Settings.SubjectTransform.Location)
 	, Resolution(InResolution)
 {
@@ -88,7 +66,7 @@ FRenderProbeStage::FRenderProbeStage(const FRenderProbeProfileSettings& Settings
 		.SetCreateDefaultLighting(false)
 		.SetForceMipsResident(true)
 		.SetTransactional(false)
-		.AllowLumenPrimitiveTrackingInPreviewWorld(Settings.Lumen.bEnabled));
+		.AllowLumenPrimitiveTrackingInPreviewWorld(CaptureSetup.bUsesLumen));
 
 	RenderTarget.Reset(NewObject<UTextureRenderTarget2D>(GetTransientPackage()));
 	RenderTarget->RenderTargetFormat = RTF_RGBA8_SRGB;
@@ -208,23 +186,22 @@ void FRenderProbeStage::RemoveSubject(UMeshComponent& Subject)
 	Scene->RemoveComponent(&Subject);
 }
 
-bool FRenderProbeStage::Capture(const UMeshComponent& Subject, const FRenderProbeCamera& Camera, const FString& FilePath)
+bool FRenderProbeStage::Capture(const UMeshComponent& Subject, const FRenderProbeCamera& Camera, const FString& FilePath, FString& OutFailedStep)
 {
 	USceneCaptureComponent2D* CaptureComponent = NewObject<USceneCaptureComponent2D>(GetTransientPackage());
 	CaptureComponent->TextureTarget = RenderTarget.Get();
 	CaptureComponent->CaptureSource = SCS_FinalColorLDR;
 	CaptureComponent->bCaptureEveryFrame = false;
 	CaptureComponent->bCaptureOnMovement = false;
-	CaptureComponent->bAlwaysPersistRenderingState = Lumen.bEnabled;
+	CaptureComponent->bAlwaysPersistRenderingState = CaptureSetup.bUsesLumen;
 	CaptureComponent->FOVAngle = Camera.Fov;
-	CaptureComponent->PostProcessSettings = PostProcess;
+	CaptureComponent->PostProcessSettings = CaptureSetup.PostProcess;
 	CaptureComponent->PostProcessBlendWeight = 1.f;
 	Scene->AddComponent(CaptureComponent, MakeCameraTransform(Subject, Camera));
 	CaptureComponent->ShowFlags.SetTemporalAA(false);
 	CaptureComponent->ShowFlags.SetMotionBlur(false);
 
-	const int32 CaptureCount = (Lumen.bEnabled ? Lumen.ConvergenceCaptures : 0) + 1;
-	for (int32 CaptureIndex = 0; CaptureIndex < CaptureCount; ++CaptureIndex)
+	for (int32 CaptureIndex = 0; CaptureIndex < CaptureSetup.CaptureCount; ++CaptureIndex)
 	{
 		CaptureComponent->CaptureScene();
 	}
@@ -234,10 +211,16 @@ bool FRenderProbeStage::Capture(const UMeshComponent& Subject, const FRenderProb
 	Scene->RemoveComponent(CaptureComponent);
 	if (!bRead)
 	{
+		OutFailedStep = RenderProbeStageLocal::ReadRenderTargetStep;
 		return false;
 	}
 	RenderProbeStageLocal::MakeOpaque(Image);
-	return FImageUtils::SaveImageByExtension(*FilePath, Image);
+	if (!FImageUtils::SaveImageByExtension(*FilePath, Image))
+	{
+		OutFailedStep = RenderProbeStageLocal::WritePngStep;
+		return false;
+	}
+	return true;
 }
 
 FTransform FRenderProbeStage::MakeCameraTransform(const UMeshComponent& Subject, const FRenderProbeCamera& Camera) const

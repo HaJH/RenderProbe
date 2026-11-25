@@ -16,7 +16,6 @@ struct FRenderProbeProfileSettings;
 struct FRenderProbeStageAssets;
 struct FSoftObjectPath;
 
-/** Runs one render job. Holds the job's loaded assets until it is discarded; create one per job. */
 UCLASS()
 class RENDERPROBE_API URenderProbeRunner : public UObject
 {
@@ -41,7 +40,6 @@ private:
 		const FRenderProbeItem* Item = nullptr;
 		TArray<FSlotMaterial> Slots;
 		UObject* Mesh = nullptr;
-		/** Material each mesh slot renders with, indexed by slot; null keeps the slot empty. */
 		TArray<UMaterialInterface*> RenderMaterials;
 	};
 

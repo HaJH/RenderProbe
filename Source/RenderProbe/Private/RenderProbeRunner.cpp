@@ -22,7 +22,6 @@
 #include "RenderProbeJob.h"
 #include "RenderProbeJobValidation.h"
 #include "RenderProbeJson.h"
-#include "RenderProbeLog.h"
 #include "RenderProbeMaterialStats.h"
 #include "RenderProbeOutputPaths.h"
 #include "RenderProbeProfile.h"
@@ -32,8 +31,14 @@
 namespace RenderProbeRunnerLocal
 {
 	static constexpr TCHAR ObjectNameDelimiter = TEXT('.');
+	static constexpr const TCHAR* WriteResultStep = TEXT("writing result.json");
 
-	/** Accepts both "/Root/Path/Asset.Asset" and the package-only form "/Root/Path/Asset". */
+	static FRenderProbeDiagnostic MakeOutputFailed(const FString& Path, const FString& FailedStep)
+	{
+		return FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::OutputFailed, FString(),
+			FString::Printf(TEXT("%s failed for '%s'"), *FailedStep, *Path));
+	}
+
 	static FString ToObjectPath(const FString& Path)
 	{
 		int32 DelimiterIndex = INDEX_NONE;
@@ -85,7 +90,6 @@ namespace RenderProbeRunnerLocal
 		}
 	}
 
-	/** Why the renderer would draw the slot with the engine default material, or unset when it draws the slot's own material. */
 	static TOptional<FString> FindDefaultMaterialReason(UMaterialInterface* Material, const bool bSkeletal)
 	{
 		if (!Material)
@@ -128,7 +132,6 @@ namespace RenderProbeRunnerLocal
 		}
 	}
 
-	/** Adds a Timeout diagnostic per slot whose material was still compiling; returns whether any was. */
 	static bool ReportStillCompiling(const TArray<UMaterialInterface*>& SlotMaterials, const TSet<const FMaterialResource*>& StillCompiling, FRenderProbeItemResult& OutItemResult)
 	{
 		bool bAnyStillCompiling = false;
@@ -340,13 +343,14 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 		for (const FRenderProbeCamera& Camera : Job.Cameras)
 		{
 			const FString CapturePath = RenderProbeOutputPaths::CapturePath(Job.OutputDir, Plan.Item->Name, Camera.Name);
-			if (Stage.Capture(*Subject, Camera, CapturePath))
+			FString FailedStep;
+			if (Stage.Capture(*Subject, Camera, CapturePath, FailedStep))
 			{
 				ItemResult.Images.Add(Camera.Name, CapturePath);
 			}
 			else
 			{
-				UE_LOG(LogRenderProbe, Error, TEXT("Failed to capture %s"), *CapturePath);
+				ItemResult.Diagnostics.Add(RenderProbeRunnerLocal::MakeOutputFailed(CapturePath, FailedStep));
 			}
 		}
 		Stage.RemoveSubject(*Subject);
@@ -488,7 +492,8 @@ FRenderProbeResult URenderProbeRunner::Finish(const FString& OutputDir, FRenderP
 		IFileManager::Get().MakeDirectory(*OutputDir, true);
 		if (!FFileHelper::SaveStringToFile(RenderProbeJson::ResultToJsonString(Result), *ResultPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 		{
-			UE_LOG(LogRenderProbe, Error, TEXT("Failed to write %s"), *ResultPath);
+			Result.Diagnostics.Add(RenderProbeRunnerLocal::MakeOutputFailed(ResultPath, RenderProbeRunnerLocal::WriteResultStep));
+			Result.bOk = false;
 		}
 	}
 	return Result;

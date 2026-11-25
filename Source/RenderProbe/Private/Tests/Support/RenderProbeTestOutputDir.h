@@ -10,7 +10,6 @@
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 
-/** A unique output directory under the automation transient directory, deleted with its contents on destruction. */
 class FRenderProbeTestOutputDir
 {
 public:
