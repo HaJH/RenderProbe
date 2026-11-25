@@ -4,12 +4,19 @@
 
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
+#include "Components/MeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkinnedAssetCommon.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/TextureCube.h"
+#include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "MaterialDomain.h"
+#include "MaterialShared.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Optional.h"
 #include "Misc/PackageName.h"
 #include "RenderProbeDiagnostic.h"
 #include "RenderProbeJob.h"
@@ -19,6 +26,7 @@
 #include "RenderProbeMaterialStats.h"
 #include "RenderProbeOutputPaths.h"
 #include "RenderProbeProfile.h"
+#include "RenderProbeStage.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace RenderProbeRunnerLocal
@@ -68,6 +76,74 @@ namespace RenderProbeRunnerLocal
 			return Compare.Similar.IsSet() && Compare.Similar.GetValue();
 		});
 	}
+
+	static void AddResource(UMaterialInterface* Material, TArray<FMaterialResource*>& OutResources)
+	{
+		if (FMaterialResource* Resource = RenderProbeMaterialStats::FindResource(Material))
+		{
+			OutResources.AddUnique(Resource);
+		}
+	}
+
+	/** Why the renderer would draw the slot with the engine default material, or unset when it draws the slot's own material. */
+	static TOptional<FString> FindDefaultMaterialReason(UMaterialInterface* Material, const bool bSkeletal)
+	{
+		if (!Material)
+		{
+			return FString(TEXT("slot has no material"));
+		}
+		if (Material == UMaterial::GetDefaultMaterial(MD_Surface))
+		{
+			return FString::Printf(TEXT("slot uses the engine default material %s"), *Material->GetPathName());
+		}
+
+		const FMaterialResource* Resource = RenderProbeMaterialStats::FindResource(Material);
+		if (!Resource)
+		{
+			return FString::Printf(TEXT("%s has no material resource for the editor shader platform"), *Material->GetPathName());
+		}
+		if (!Resource->GetCompileErrors().IsEmpty())
+		{
+			return FString::Printf(TEXT("%s failed to compile"), *Material->GetPathName());
+		}
+		if (!Resource->GetGameThreadShaderMap())
+		{
+			return FString::Printf(TEXT("%s has no shader map"), *Material->GetPathName());
+		}
+		if (bSkeletal && !Material->CheckMaterialUsage_Concurrent(MATUSAGE_SkeletalMesh))
+		{
+			return FString::Printf(TEXT("%s cannot be used with skeletal meshes"), *Material->GetPathName());
+		}
+		return {};
+	}
+
+	static void ReportDefaultMaterials(const UMeshComponent& Subject, const bool bSkeletal, FRenderProbeItemResult& OutItemResult)
+	{
+		for (int32 SlotIndex = 0; SlotIndex < Subject.GetNumMaterials(); ++SlotIndex)
+		{
+			if (TOptional<FString> Reason = FindDefaultMaterialReason(Subject.GetMaterial(SlotIndex), bSkeletal))
+			{
+				OutItemResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::DefaultMaterial, LexToString(SlotIndex), Reason.GetValue()));
+			}
+		}
+	}
+
+	/** Adds a Timeout diagnostic per slot whose material was still compiling; returns whether any was. */
+	static bool ReportStillCompiling(const TArray<UMaterialInterface*>& SlotMaterials, const TSet<const FMaterialResource*>& StillCompiling, FRenderProbeItemResult& OutItemResult)
+	{
+		bool bAnyStillCompiling = false;
+		for (int32 SlotIndex = 0; SlotIndex < SlotMaterials.Num(); ++SlotIndex)
+		{
+			const FMaterialResource* Resource = RenderProbeMaterialStats::FindResource(SlotMaterials[SlotIndex]);
+			if (Resource && StillCompiling.Contains(Resource))
+			{
+				bAnyStillCompiling = true;
+				OutItemResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::Timeout, LexToString(SlotIndex),
+					FString::Printf(TEXT("%s was still compiling when the wait limit passed; the subject was not captured"), *SlotMaterials[SlotIndex]->GetPathName())));
+			}
+		}
+		return bAnyStillCompiling;
+	}
 }
 
 FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
@@ -79,7 +155,8 @@ FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
 		return Finish(Job.OutputDir, MoveTemp(Result));
 	}
 
-	ResolveProfileSettings(Job, Result);
+	const FRenderProbeProfileSettings* Settings = ResolveProfileSettings(Job, Result);
+	const FRenderProbeStageAssets StageAssets = Settings ? ResolveStageAssets(*Settings, Result) : FRenderProbeStageAssets();
 
 	TArray<FItemPlan> Plans;
 	for (const FRenderProbeItem& Item : Job.Items)
@@ -94,13 +171,19 @@ FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
 	{
 		for (const FSlotMaterial& Slot : Plan.Slots)
 		{
-			if (FMaterialResource* Resource = RenderProbeMaterialStats::FindResource(Slot.Material))
-			{
-				Resources.AddUnique(Resource);
-			}
+			RenderProbeRunnerLocal::AddResource(Slot.Material, Resources);
+		}
+		for (UMaterialInterface* Material : Plan.RenderMaterials)
+		{
+			RenderProbeRunnerLocal::AddResource(Material, Resources);
 		}
 	}
 	const TSet<const FMaterialResource*> StillCompiling = RenderProbeMaterialStats::WaitForCompilation(Resources, Job.WaitTimeoutSeconds);
+
+	if (Settings)
+	{
+		CaptureItems(Job, *Settings, StageAssets, Plans, StillCompiling, Result);
+	}
 
 	for (int32 PlanIndex = 0; PlanIndex < Plans.Num(); ++PlanIndex)
 	{
@@ -176,6 +259,100 @@ const FRenderProbeProfileSettings* URenderProbeRunner::ResolveProfileSettings(co
 	return &Profile->Settings;
 }
 
+template <typename AssetType>
+AssetType* URenderProbeRunner::LoadProfileAsset(const FSoftObjectPath& Path, const TCHAR* What, FRenderProbeResult& OutResult)
+{
+	AssetType* Asset = Path.IsNull() ? nullptr : Cast<AssetType>(LoadAsset(Path.ToString()));
+	if (!Asset)
+	{
+		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::MissingAsset, FString(),
+			FString::Printf(TEXT("%s '%s' does not exist or is not a %s"), What, *Path.ToString(), *AssetType::StaticClass()->GetName())));
+	}
+	return Asset;
+}
+
+FRenderProbeStageAssets URenderProbeRunner::ResolveStageAssets(const FRenderProbeProfileSettings& Settings, FRenderProbeResult& OutResult)
+{
+	FRenderProbeStageAssets Assets;
+	const FRenderProbeRigSettings& Rig = Settings.Rig;
+	if (Rig.bEnabled && Rig.SkyLight.bEnabled && !Rig.SkyLight.Cubemap.IsNull())
+	{
+		Assets.SkyCubemap = LoadProfileAsset<UTextureCube>(Rig.SkyLight.Cubemap.ToSoftObjectPath(), TEXT("sky light cubemap"), OutResult);
+	}
+	if (Rig.bEnabled && Rig.Floor.bEnabled)
+	{
+		Assets.FloorMesh = LoadProfileAsset<UStaticMesh>(Rig.Floor.Mesh.ToSoftObjectPath(), TEXT("floor mesh"), OutResult);
+		if (!Rig.Floor.Material.IsNull())
+		{
+			Assets.FloorMaterial = LoadProfileAsset<UMaterialInterface>(Rig.Floor.Material.ToSoftObjectPath(), TEXT("floor material"), OutResult);
+		}
+	}
+
+	for (const FRenderProbeEnvironmentLevel& Level : Settings.EnvironmentLevels)
+	{
+		UWorld* LevelWorld = LoadProfileAsset<UWorld>(Level.Level.ToSoftObjectPath(), TEXT("environment level"), OutResult);
+		if (!LevelWorld)
+		{
+			continue;
+		}
+		if (LevelWorld->IsPartitionedWorld())
+		{
+			OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::UnsupportedLevel, FString(),
+				FString::Printf(TEXT("environment level '%s' is a world partition map"), *LevelWorld->GetPathName())));
+			continue;
+		}
+		Assets.Levels.Add({ LevelWorld, Level.Placement });
+	}
+	return Assets;
+}
+
+void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderProbeProfileSettings& Settings, const FRenderProbeStageAssets& Assets,
+	const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, FRenderProbeResult& OutResult)
+{
+	const bool bAnyMesh = Algo::AnyOf(Plans, [](const FItemPlan& Plan) { return Plan.Mesh != nullptr; });
+	if (!bAnyMesh || Job.Cameras.IsEmpty())
+	{
+		return;
+	}
+
+	FRenderProbeStage Stage(Settings, Assets, Job.Resolution);
+	for (const FString& FailedLevel : Stage.StreamLevels(Assets.Levels))
+	{
+		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::MissingAsset, FString(),
+			FString::Printf(TEXT("environment level '%s' could not be streamed"), *FailedLevel)));
+	}
+
+	for (int32 PlanIndex = 0; PlanIndex < Plans.Num(); ++PlanIndex)
+	{
+		const FItemPlan& Plan = Plans[PlanIndex];
+		if (!Plan.Mesh)
+		{
+			continue;
+		}
+		FRenderProbeItemResult& ItemResult = OutResult.Items[PlanIndex];
+		if (RenderProbeRunnerLocal::ReportStillCompiling(Plan.RenderMaterials, StillCompiling, ItemResult))
+		{
+			continue;
+		}
+
+		UMeshComponent* Subject = Stage.PlaceSubject(*Plan.Mesh, Plan.RenderMaterials, Plan.Item->Transform);
+		RenderProbeRunnerLocal::ReportDefaultMaterials(*Subject, Plan.Mesh->IsA<USkeletalMesh>(), ItemResult);
+		for (const FRenderProbeCamera& Camera : Job.Cameras)
+		{
+			const FString CapturePath = RenderProbeOutputPaths::CapturePath(Job.OutputDir, Plan.Item->Name, Camera.Name);
+			if (Stage.Capture(*Subject, Camera, CapturePath))
+			{
+				ItemResult.Images.Add(Camera.Name, CapturePath);
+			}
+			else
+			{
+				UE_LOG(LogRenderProbe, Error, TEXT("Failed to capture %s"), *CapturePath);
+			}
+		}
+		Stage.RemoveSubject(*Subject);
+	}
+}
+
 URenderProbeRunner::FItemPlan URenderProbeRunner::PlanItem(const FRenderProbeItem& Item, FRenderProbeItemResult& OutItemResult)
 {
 	FItemPlan Plan;
@@ -187,7 +364,7 @@ URenderProbeRunner::FItemPlan URenderProbeRunner::PlanItem(const FRenderProbeIte
 		return Plan;
 	}
 
-	const UObject* Mesh = LoadAsset(Item.Mesh);
+	UObject* Mesh = LoadAsset(Item.Mesh);
 	if (!Mesh)
 	{
 		OutItemResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::MissingAsset, FString(),
@@ -198,7 +375,7 @@ URenderProbeRunner::FItemPlan URenderProbeRunner::PlanItem(const FRenderProbeIte
 	return Plan;
 }
 
-void URenderProbeRunner::PlanMeshSlots(const FRenderProbeItem& Item, const UObject& Mesh, FItemPlan& OutPlan, FRenderProbeItemResult& OutItemResult)
+void URenderProbeRunner::PlanMeshSlots(const FRenderProbeItem& Item, UObject& Mesh, FItemPlan& OutPlan, FRenderProbeItemResult& OutItemResult)
 {
 	TArray<FName> SlotNames;
 	TArray<UMaterialInterface*> SlotMaterials;
@@ -225,6 +402,7 @@ void URenderProbeRunner::PlanMeshSlots(const FRenderProbeItem& Item, const UObje
 		return;
 	}
 
+	TArray<UMaterialInterface*> RenderMaterials = SlotMaterials;
 	TArray<bool> SlotUsable;
 	SlotUsable.Init(true, SlotMaterials.Num());
 	for (const TPair<FString, FString>& Override : Item.Materials)
@@ -240,7 +418,24 @@ void URenderProbeRunner::PlanMeshSlots(const FRenderProbeItem& Item, const UObje
 		UMaterialInterface* Material = LoadMaterial(Override.Key, Override.Value, OutItemResult);
 		SlotMaterials[SlotIndex] = Material;
 		SlotUsable[SlotIndex] = Material != nullptr;
+		if (Material)
+		{
+			RenderMaterials[SlotIndex] = Material;
+		}
 	}
+
+	if (Mesh.IsA<USkeletalMesh>())
+	{
+		for (UMaterialInterface* Material : RenderMaterials)
+		{
+			if (Material)
+			{
+				Material->CheckMaterialUsage(MATUSAGE_SkeletalMesh);
+			}
+		}
+	}
+	OutPlan.Mesh = &Mesh;
+	OutPlan.RenderMaterials = MoveTemp(RenderMaterials);
 
 	for (int32 SlotIndex = 0; SlotIndex < SlotMaterials.Num(); ++SlotIndex)
 	{

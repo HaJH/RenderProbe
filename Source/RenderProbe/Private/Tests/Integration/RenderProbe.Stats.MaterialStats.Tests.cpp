@@ -7,6 +7,7 @@
 #include "RenderProbeRunner.h"
 #include "Tests/Support/RenderProbeTestMaterials.h"
 #include "Tests/Support/RenderProbeTestOutputDir.h"
+#include "Tests/Support/RenderProbeTestRhi.h"
 #include "UObject/StrongObjectPtr.h"
 
 #if WITH_AUTOMATION_TESTS
@@ -61,6 +62,10 @@ TEST_CLASS(RenderProbeMaterialStats, "RenderProbe.Integration.Stats")
 
 	TEST_METHOD(StaticSwitchPermutationsReportDifferentStatistics)
 	{
+		if (!RenderProbeTestRhi::CanRender(*TestRunner))
+		{
+			return;
+		}
 		const TStrongObjectPtr<UMaterial> Parent(RenderProbeTestMaterials::CreateStaticSwitchMaterial(SwitchName));
 		const TStrongObjectPtr<UMaterialInstanceConstant> SwitchOn(RenderProbeTestMaterials::CreateInstanceWithStaticSwitch(Parent.Get(), SwitchName, true));
 		const TStrongObjectPtr<UMaterialInstanceConstant> SwitchOff(RenderProbeTestMaterials::CreateInstanceWithStaticSwitch(Parent.Get(), SwitchName, false));
@@ -87,6 +92,10 @@ TEST_CLASS(RenderProbeMaterialStats, "RenderProbe.Integration.Stats")
 
 	TEST_METHOD(CompileFailureReportsCompileError)
 	{
+		if (!RenderProbeTestRhi::CanRender(*TestRunner))
+		{
+			return;
+		}
 		TestRunner->AddExpectedMessagePlain(MaterialCompileFailureLog, ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, IgnoreAnyOccurrences);
 		TestRunner->AddExpectedMessagePlain(MissingTextureLog, ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, IgnoreAnyOccurrences);
 		const TStrongObjectPtr<UMaterial> Broken(RenderProbeTestMaterials::CreateMaterialMissingTexture());

@@ -18,6 +18,7 @@ public class RenderProbe : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"ImageCore",
 			"Json",
 			"JsonUtilities",
 			"MaterialEditor",

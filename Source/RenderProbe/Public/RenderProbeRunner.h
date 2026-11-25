@@ -8,10 +8,13 @@
 
 #include "RenderProbeRunner.generated.h"
 
+class FMaterialResource;
 class UMaterialInterface;
 struct FRenderProbeItem;
 struct FRenderProbeJob;
 struct FRenderProbeProfileSettings;
+struct FRenderProbeStageAssets;
+struct FSoftObjectPath;
 
 /** Runs one render job. Holds the job's loaded assets until it is discarded; create one per job. */
 UCLASS()
@@ -37,15 +40,26 @@ private:
 	{
 		const FRenderProbeItem* Item = nullptr;
 		TArray<FSlotMaterial> Slots;
+		UObject* Mesh = nullptr;
+		/** Material each mesh slot renders with, indexed by slot; null keeps the slot empty. */
+		TArray<UMaterialInterface*> RenderMaterials;
 	};
 
 	UObject* LoadAsset(const FString& Path);
 
 	const FRenderProbeProfileSettings* ResolveProfileSettings(const FRenderProbeJob& Job, FRenderProbeResult& OutResult);
 
+	FRenderProbeStageAssets ResolveStageAssets(const FRenderProbeProfileSettings& Settings, FRenderProbeResult& OutResult);
+
+	template <typename AssetType>
+	AssetType* LoadProfileAsset(const FSoftObjectPath& Path, const TCHAR* What, FRenderProbeResult& OutResult);
+
+	void CaptureItems(const FRenderProbeJob& Job, const FRenderProbeProfileSettings& Settings, const FRenderProbeStageAssets& Assets,
+		const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, FRenderProbeResult& OutResult);
+
 	FItemPlan PlanItem(const FRenderProbeItem& Item, FRenderProbeItemResult& OutItemResult);
 
-	void PlanMeshSlots(const FRenderProbeItem& Item, const UObject& Mesh, FItemPlan& OutPlan, FRenderProbeItemResult& OutItemResult);
+	void PlanMeshSlots(const FRenderProbeItem& Item, UObject& Mesh, FItemPlan& OutPlan, FRenderProbeItemResult& OutItemResult);
 
 	void PlanLabeledMaterials(const FRenderProbeItem& Item, FItemPlan& OutPlan, FRenderProbeItemResult& OutItemResult);
 

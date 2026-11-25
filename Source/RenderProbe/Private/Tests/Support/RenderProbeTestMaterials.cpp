@@ -4,21 +4,33 @@
 
 #if WITH_AUTOMATION_TESTS
 
+#include "Engine/EngineTypes.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpression.h"
+#include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
+#include "Materials/MaterialExpressionFrac.h"
+#include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionSine.h"
 #include "Materials/MaterialExpressionStaticSwitchParameter.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTime.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "SceneTypes.h"
+#include "UObject/Class.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
 
 namespace RenderProbeTestMaterials
 {
 	static constexpr const TCHAR* SwitchTrueInputName = TEXT("True");
 	static constexpr const TCHAR* SwitchFalseInputName = TEXT("False");
+	static constexpr const TCHAR* BinaryInputAName = TEXT("A");
+	static constexpr const TCHAR* SkyAtmosphereLightDirectionClassPath = TEXT("/Script/Engine.MaterialExpressionSkyAtmosphereLightDirection");
+	static constexpr float TimeColorOffset = 0.25f;
+	static constexpr float SignedToUnitScale = 0.5f;
+	static constexpr float SignedToUnitBias = 0.5f;
 
 	template <typename ObjectType>
 	static ObjectType* NewTransient(const TCHAR* BaseName)
@@ -71,6 +83,50 @@ namespace RenderProbeTestMaterials
 		UMaterial* Material = NewTransient<UMaterial>(TEXT("M_RenderProbeTestMissingTexture"));
 		UMaterialExpressionTextureSample* Sample = AddExpression<UMaterialExpressionTextureSample>(Material);
 		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Sample, FString(), MP_BaseColor));
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		return Material;
+	}
+
+	static UMaterial* NewUnlitMaterial(const TCHAR* BaseName)
+	{
+		UMaterial* Material = NewTransient<UMaterial>(BaseName);
+		Material->SetShadingModel(MSM_Unlit);
+		return Material;
+	}
+
+	UMaterial* CreateTimeColorMaterial()
+	{
+		UMaterial* Material = NewUnlitMaterial(TEXT("M_RenderProbeTestTimeColor"));
+
+		UMaterialExpressionTime* Time = AddExpression<UMaterialExpressionTime>(Material);
+		UMaterialExpressionAdd* Offset = AddExpression<UMaterialExpressionAdd>(Material);
+		Offset->ConstB = TimeColorOffset;
+		UMaterialExpressionFrac* Frac = AddExpression<UMaterialExpressionFrac>(Material);
+
+		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Time, FString(), Offset, BinaryInputAName));
+		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Offset, FString(), Frac, FString()));
+		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Frac, FString(), MP_EmissiveColor));
+
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		return Material;
+	}
+
+	UMaterial* CreateSkyAtmosphereLightDirectionMaterial()
+	{
+		UMaterial* Material = NewUnlitMaterial(TEXT("M_RenderProbeTestSkyLightDirection"));
+
+		UClass* DirectionClass = FindObject<UClass>(nullptr, SkyAtmosphereLightDirectionClassPath);
+		check(DirectionClass);
+		UMaterialExpression* Direction = UMaterialEditingLibrary::CreateMaterialExpression(Material, DirectionClass);
+		UMaterialExpressionMultiply* Scale = AddExpression<UMaterialExpressionMultiply>(Material);
+		Scale->ConstB = SignedToUnitScale;
+		UMaterialExpressionAdd* Bias = AddExpression<UMaterialExpressionAdd>(Material);
+		Bias->ConstB = SignedToUnitBias;
+
+		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Direction, FString(), Scale, BinaryInputAName));
+		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Scale, FString(), Bias, BinaryInputAName));
+		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Bias, FString(), MP_EmissiveColor));
+
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		return Material;
 	}
