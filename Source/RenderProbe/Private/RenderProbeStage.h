@@ -50,6 +50,9 @@ public:
 
 	TArray<FString> StreamLevels(const TArray<FRenderProbeStageLevel>& Levels);
 
+	/** Captures the sky light and reflection captures from the rig and levels; call before placing any subject. */
+	void UpdateEnvironmentCaptures();
+
 	UMeshComponent* PlaceSubject(UObject& Mesh, const TArray<UMaterialInterface*>& SlotMaterials, const FRenderProbeTransform& Transform);
 
 	void RemoveSubject(UMeshComponent& Subject);

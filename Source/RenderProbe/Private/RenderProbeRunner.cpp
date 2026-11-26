@@ -13,6 +13,7 @@
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
 #include "MaterialDomain.h"
 #include "MaterialShared.h"
 #include "Materials/Material.h"
@@ -22,6 +23,7 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "RenderProbeCommandLineSwitches.h"
+#include "RenderProbeCompilationWait.h"
 #include "RenderProbeComparison.h"
 #include "RenderProbeDiagnostic.h"
 #include "RenderProbeJob.h"
@@ -264,12 +266,13 @@ FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
 			RenderProbeRunnerLocal::AddResource(Material, Resources);
 		}
 	}
-	const TSet<const FMaterialResource*> StillCompiling = RenderProbeMaterialStats::WaitForCompilation(Resources, Job.WaitTimeoutSeconds);
+	const double WaitDeadline = FPlatformTime::Seconds() + Job.WaitTimeoutSeconds;
+	const TSet<const FMaterialResource*> StillCompiling = RenderProbeCompilationWait::WaitForMaterials(Resources, WaitDeadline);
 
 	TMap<FString, FString> RepeatPathsByCapture;
 	if (Settings)
 	{
-		CaptureItems(Job, *Settings, StageAssets, Plans, StillCompiling, RepeatPathsByCapture, Result);
+		CaptureItems(Job, *Settings, StageAssets, Plans, StillCompiling, WaitDeadline, RepeatPathsByCapture, Result);
 	}
 	RenderProbeRunnerLocal::CompareCaptures(Job, RepeatPathsByCapture, Result);
 	RenderProbeRunnerLocal::DeleteRepeatCaptures(RepeatPathsByCapture);
@@ -408,7 +411,8 @@ FRenderProbeStageAssets URenderProbeRunner::ResolveStageAssets(const FRenderProb
 }
 
 void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderProbeProfileSettings& Settings, const FRenderProbeStageAssets& Assets,
-	const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, TMap<FString, FString>& OutRepeatPathsByCapture, FRenderProbeResult& OutResult)
+	const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, const double WaitDeadline, TMap<FString, FString>& OutRepeatPathsByCapture,
+	FRenderProbeResult& OutResult)
 {
 	const bool bAnyMesh = Algo::AnyOf(Plans, [](const FItemPlan& Plan) { return Plan.Mesh != nullptr; });
 	if (!bAnyMesh || Job.Cameras.IsEmpty())
@@ -434,6 +438,12 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::MissingAsset, FString(),
 			FString::Printf(TEXT("environment level '%s' could not be streamed"), *FailedLevel)));
 	}
+	if (!RenderProbeCompilationWait::WaitForAllAssets(WaitDeadline))
+	{
+		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::Timeout, FString(),
+			TEXT("assets were still compiling when the wait limit passed before the sky light capture; the rig and environment levels were captured as they were")));
+	}
+	Stage.UpdateEnvironmentCaptures();
 
 	const TSet<FString> ComparedItemNames = RenderProbeRunnerLocal::CollectComparedItemNames(Job);
 	for (int32 PlanIndex = 0; PlanIndex < Plans.Num(); ++PlanIndex)

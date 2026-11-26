@@ -58,7 +58,8 @@ private:
 	AssetType* LoadProfileAsset(const FSoftObjectPath& Path, const TCHAR* What, FRenderProbeResult& OutResult);
 
 	void CaptureItems(const FRenderProbeJob& Job, const FRenderProbeProfileSettings& Settings, const FRenderProbeStageAssets& Assets,
-		const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, TMap<FString, FString>& OutRepeatPathsByCapture, FRenderProbeResult& OutResult);
+		const TArray<FItemPlan>& Plans, const TSet<const FMaterialResource*>& StillCompiling, double WaitDeadline, TMap<FString, FString>& OutRepeatPathsByCapture,
+		FRenderProbeResult& OutResult);
 
 	FItemPlan PlanItem(const FRenderProbeItem& Item, FRenderProbeItemResult& OutItemResult);
 

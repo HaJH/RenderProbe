@@ -2,9 +2,6 @@
 
 #include "RenderProbeMaterialStats.h"
 
-#include "AssetCompilingManager.h"
-#include "HAL/PlatformProcess.h"
-#include "HAL/PlatformTime.h"
 #include "MaterialEditingLibrary.h"
 #include "MaterialShared.h"
 #include "Materials/MaterialInterface.h"
@@ -14,46 +11,11 @@
 
 namespace RenderProbeMaterialStats
 {
-	static constexpr float CompilationPollIntervalSeconds = 0.05f;
 	static constexpr const TCHAR* CompileErrorSeparator = TEXT("\n");
 
 	FMaterialResource* FindResource(UMaterialInterface* Material)
 	{
 		return Material ? Material->GetMaterialResource(GMaxRHIShaderPlatform) : nullptr;
-	}
-
-	static TSet<const FMaterialResource*> CollectUnfinished(const TArray<FMaterialResource*>& Resources)
-	{
-		TSet<const FMaterialResource*> Unfinished;
-		for (const FMaterialResource* Resource : Resources)
-		{
-			if (!Resource->IsCompilationFinished())
-			{
-				Unfinished.Add(Resource);
-			}
-		}
-		return Unfinished;
-	}
-
-	TSet<const FMaterialResource*> WaitForCompilation(const TArray<FMaterialResource*>& Resources, const double TimeoutSeconds)
-	{
-		for (FMaterialResource* Resource : Resources)
-		{
-			if (!Resource->IsGameThreadShaderMapComplete())
-			{
-				Resource->SubmitCompileJobs_GameThread(EShaderCompileJobPriority::High);
-			}
-		}
-
-		const double Deadline = FPlatformTime::Seconds() + TimeoutSeconds;
-		TSet<const FMaterialResource*> Unfinished = CollectUnfinished(Resources);
-		while (!Unfinished.IsEmpty() && FPlatformTime::Seconds() < Deadline)
-		{
-			FAssetCompilingManager::Get().ProcessAsyncTasks();
-			FPlatformProcess::Sleep(CompilationPollIntervalSeconds);
-			Unfinished = CollectUnfinished(Resources);
-		}
-		return Unfinished;
 	}
 
 	static FRenderProbeMaterialStats ToResultStats(const UMaterialInterface& Material, const FMaterialStatistics& Statistics)

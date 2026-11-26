@@ -2,7 +2,6 @@
 
 #include "RenderProbeStage.h"
 
-#include "AssetCompilingManager.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -171,9 +170,12 @@ TArray<FString> FRenderProbeStage::StreamLevels(const TArray<FRenderProbeStageLe
 	}
 
 	World->FlushLevelStreaming(EFlushLevelStreamingType::Full);
-	FAssetCompilingManager::Get().FinishAllCompilation();
-	Scene->UpdateCaptureContents();
 	return FailedLevels;
+}
+
+void FRenderProbeStage::UpdateEnvironmentCaptures()
+{
+	Scene->UpdateCaptureContents();
 }
 
 UMeshComponent* FRenderProbeStage::PlaceSubject(UObject& Mesh, const TArray<UMaterialInterface*>& SlotMaterials, const FRenderProbeTransform& Transform)
