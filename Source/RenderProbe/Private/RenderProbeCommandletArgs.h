@@ -21,7 +21,7 @@ struct FRenderProbeCommandletArgs
 
 namespace RenderProbeCommandletArgs
 {
-	extern const TCHAR* const Usage;
+	FString GetUsage();
 
 	bool Parse(const FString& Params, FRenderProbeCommandletArgs& OutArgs, FString& OutError);
 }

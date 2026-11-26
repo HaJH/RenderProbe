@@ -21,6 +21,7 @@
 #include "Misc/Optional.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "RenderProbeCommandLineSwitches.h"
 #include "RenderProbeComparison.h"
 #include "RenderProbeDiagnostic.h"
 #include "RenderProbeJob.h"
@@ -31,6 +32,7 @@
 #include "RenderProbeOutputPaths.h"
 #include "RenderProbeProfile.h"
 #include "RenderProbeStage.h"
+#include "Templates/ValueOrError.h"
 #include "UObject/SoftObjectPath.h"
 
 namespace RenderProbeRunnerLocal
@@ -39,7 +41,6 @@ namespace RenderProbeRunnerLocal
 	static constexpr const TCHAR* WriteResultStep = TEXT("writing result.json");
 	static constexpr const TCHAR* RepeatCapturePrefix = TEXT("RenderProbeRepeat-");
 	static constexpr const TCHAR* RepeatCaptureExtension = TEXT(".png");
-	static constexpr const TCHAR* AllowCommandletRenderingSwitch = TEXT("-AllowCommandletRendering");
 
 	static bool CanRenderInThisProcess()
 	{
@@ -283,29 +284,37 @@ FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
 	return Finish(Job.OutputDir, MoveTemp(Result));
 }
 
-FRenderProbeResult URenderProbeRunner::RunJson(const FString& JobJson, const TOptional<FString>& OutputDirOverride)
+FRenderProbeResult URenderProbeRunner::RunJson(const FString& JobJson)
+{
+	TValueOrError<FRenderProbeJob, FRenderProbeResult> Job = ReadJobJson(JobJson);
+	return Job.HasValue() ? Run(Job.GetValue()) : Job.StealError();
+}
+
+FRenderProbeResult URenderProbeRunner::RunJobFile(const FString& JobFilePath)
+{
+	TValueOrError<FRenderProbeJob, FRenderProbeResult> Job = ReadJobFile(JobFilePath);
+	return Job.HasValue() ? Run(Job.GetValue()) : Job.StealError();
+}
+
+TValueOrError<FRenderProbeJob, FRenderProbeResult> URenderProbeRunner::ReadJobJson(const FString& JobJson)
 {
 	FRenderProbeJob Job;
 	FString Error;
 	if (!RenderProbeJson::JobFromJsonString(JobJson, Job, Error))
 	{
-		return InvalidJobResult(MoveTemp(Error));
+		return MakeError(InvalidJobResult(MoveTemp(Error)));
 	}
-	if (OutputDirOverride.IsSet())
-	{
-		Job.OutputDir = OutputDirOverride.GetValue();
-	}
-	return Run(Job);
+	return MakeValue(MoveTemp(Job));
 }
 
-FRenderProbeResult URenderProbeRunner::RunJobFile(const FString& JobFilePath, const TOptional<FString>& OutputDirOverride)
+TValueOrError<FRenderProbeJob, FRenderProbeResult> URenderProbeRunner::ReadJobFile(const FString& JobFilePath)
 {
 	FString JobJson;
 	if (!FFileHelper::LoadFileToString(JobJson, *JobFilePath))
 	{
-		return InvalidJobResult(FString::Printf(TEXT("cannot read job file '%s'"), *JobFilePath));
+		return MakeError(InvalidJobResult(FString::Printf(TEXT("cannot read job file '%s'"), *JobFilePath)));
 	}
-	return RunJson(JobJson, OutputDirOverride);
+	return ReadJobJson(JobJson);
 }
 
 UObject* URenderProbeRunner::LoadAsset(const FString& Path)
@@ -403,7 +412,7 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 	if (!RenderProbeRunnerLocal::CanRenderInThisProcess())
 	{
 		const FString Detail = FString::Printf(TEXT("this commandlet cannot render; add %s to the command line. No subject was captured"),
-			RenderProbeRunnerLocal::AllowCommandletRenderingSwitch);
+			RenderProbeCommandLineSwitches::AllowCommandletRendering);
 		UE_LOG(LogRenderProbe, Error, TEXT("%s"), *Detail);
 		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::RenderingUnavailable, FString(), Detail));
 		return;

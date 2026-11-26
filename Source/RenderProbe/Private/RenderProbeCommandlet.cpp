@@ -4,10 +4,12 @@
 
 #include "Misc/FileHelper.h"
 #include "RenderProbeCommandletArgs.h"
+#include "RenderProbeJob.h"
 #include "RenderProbeJson.h"
 #include "RenderProbeLog.h"
 #include "RenderProbeResult.h"
 #include "RenderProbeRunner.h"
+#include "Templates/ValueOrError.h"
 #include "UObject/StrongObjectPtr.h"
 
 namespace RenderProbeCommandletLocal
@@ -25,7 +27,7 @@ URenderProbeCommandlet::URenderProbeCommandlet(const FObjectInitializer& ObjectI
 	IsEditor = true;
 	LogToConsole = true;
 	UseCommandletResultAsExitCode = true;
-	HelpUsage = RenderProbeCommandletArgs::Usage;
+	HelpUsage = RenderProbeCommandletArgs::GetUsage();
 }
 
 int32 URenderProbeCommandlet::Main(const FString& Params)
@@ -35,7 +37,7 @@ int32 URenderProbeCommandlet::Main(const FString& Params)
 	if (!RenderProbeCommandletArgs::Parse(Params, Args, Error))
 	{
 		UE_LOG(LogRenderProbe, Error, TEXT("%s"), *Error);
-		UE_LOG(LogRenderProbe, Display, TEXT("%s"), RenderProbeCommandletArgs::Usage);
+		UE_LOG(LogRenderProbe, Display, TEXT("%s"), *RenderProbeCommandletArgs::GetUsage());
 		return RenderProbeCommandletLocal::JobNotRunExitCode;
 	}
 
@@ -52,8 +54,21 @@ int32 URenderProbeCommandlet::Main(const FString& Params)
 
 int32 URenderProbeCommandlet::RunJob(const FRenderProbeCommandletArgs& Args)
 {
-	const TStrongObjectPtr<URenderProbeRunner> Runner(NewObject<URenderProbeRunner>());
-	const FRenderProbeResult Result = Runner->RunJobFile(Args.JobFilePath, Args.OutputDir);
+	TValueOrError<FRenderProbeJob, FRenderProbeResult> Job = URenderProbeRunner::ReadJobFile(Args.JobFilePath);
+	FRenderProbeResult Result;
+	if (Job.HasValue())
+	{
+		if (Args.OutputDir.IsSet())
+		{
+			Job.GetValue().OutputDir = Args.OutputDir.GetValue();
+		}
+		const TStrongObjectPtr<URenderProbeRunner> Runner(NewObject<URenderProbeRunner>());
+		Result = Runner->Run(Job.GetValue());
+	}
+	else
+	{
+		Result = Job.StealError();
+	}
 
 	UE_LOG(LogRenderProbe, Display, TEXT("%s"), *RenderProbeJson::ResultToJsonString(Result));
 	if (!Result.bOk)

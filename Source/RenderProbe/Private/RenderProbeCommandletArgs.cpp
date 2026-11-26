@@ -3,6 +3,7 @@
 #include "RenderProbeCommandletArgs.h"
 
 #include "Misc/Parse.h"
+#include "RenderProbeCommandLineSwitches.h"
 
 namespace RenderProbeCommandletArgsLocal
 {
@@ -28,9 +29,11 @@ namespace RenderProbeCommandletArgsLocal
 
 namespace RenderProbeCommandletArgs
 {
-	const TCHAR* const Usage =
-		TEXT("Usage: -run=RenderProbe -job=<job JSON file> [-out=<output folder>] -AllowCommandletRendering")
-		TEXT(" | -run=RenderProbe -schema=<schema file to write>");
+	FString GetUsage()
+	{
+		return FString::Printf(TEXT("Usage: -run=RenderProbe -job=<job JSON file> [-out=<output folder>] %s | -run=RenderProbe -schema=<schema file to write>"),
+			RenderProbeCommandLineSwitches::AllowCommandletRendering);
+	}
 
 	bool Parse(const FString& Params, FRenderProbeCommandletArgs& OutArgs, FString& OutError)
 	{
