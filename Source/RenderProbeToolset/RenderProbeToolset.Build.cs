@@ -17,6 +17,7 @@ public class RenderProbeToolset : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"RenderProbe",
 			"ToolsetRegistry"
 		});
 	}

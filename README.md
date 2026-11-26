@@ -8,8 +8,8 @@ The primary user is an AI agent. An agent submits a render job, waits for it to 
 
 Planned entry points, all sharing one core:
 
-- An MCP toolset (requires the engine's experimental `ToolsetRegistry` plugin; the rest of the plugin loads without it)
-- An editor subsystem (Blueprint and Python)
+- An MCP toolset: `RunJob` (job JSON string), `RunJobFile` (job JSON file path) and `GetJobSchema` (requires the engine's experimental `ToolsetRegistry` plugin; the rest of the plugin loads without it)
+- An editor subsystem (Blueprint and Python): `RunJob` (job structure), `RunJobFile` (job JSON file path) and `GetJobSchema`
 - A commandlet
 
 ## Status

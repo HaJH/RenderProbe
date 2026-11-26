@@ -2,6 +2,7 @@
 
 #include "RenderProbeSubsystem.h"
 
+#include "RenderProbeJson.h"
 #include "RenderProbeRunner.h"
 #include "UObject/StrongObjectPtr.h"
 
@@ -15,4 +16,9 @@ FRenderProbeResult URenderProbeSubsystem::RunJobFile(const FString& JobFilePath)
 {
 	const TStrongObjectPtr<URenderProbeRunner> Runner(NewObject<URenderProbeRunner>());
 	return Runner->RunJobFile(JobFilePath);
+}
+
+FString URenderProbeSubsystem::GetJobSchema() const
+{
+	return RenderProbeJson::JobSchemaString();
 }

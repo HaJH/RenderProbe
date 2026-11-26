@@ -14,4 +14,7 @@ namespace RenderProbeJson
 	RENDERPROBE_API FString JobToJsonString(const FRenderProbeJob& Job);
 
 	RENDERPROBE_API FString ResultToJsonString(const FRenderProbeResult& Result);
+
+	/** JSON object with "job" and "result" members, each the JSON Schema of the JSON that FJsonObjectConverter reads or writes for that structure. */
+	RENDERPROBE_API FString JobSchemaString();
 }
