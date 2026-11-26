@@ -15,7 +15,7 @@
 UENUM(BlueprintType, meta = (ToolTip = "How a camera is positioned."))
 enum class ERenderProbeCameraMode : uint8
 {
-	FitBounds UMETA(ToolTip = "The camera looks at the subject from yaw and pitch, at the distance where the subject's bounding sphere fills the view."),
+	FitBounds UMETA(ToolTip = "The camera looks at the subject from yaw and pitch, at the distance where the subject's bounding sphere fills the view. A skeletal mesh uses the mesh asset's reference-pose bounds, not its physics asset bodies."),
 	Explicit UMETA(ToolTip = "The camera uses location and rotation as given."),
 };
 

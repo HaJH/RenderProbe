@@ -43,6 +43,7 @@ namespace RenderProbeStageLocal
 			return Component;
 		}
 		USkeletalMeshComponent* Component = NewObject<USkeletalMeshComponent>(GetTransientPackage());
+		Component->bComponentUseFixedSkelBounds = true;
 		Component->SetSkeletalMeshAsset(CastChecked<USkeletalMesh>(&Mesh));
 		return Component;
 	}
