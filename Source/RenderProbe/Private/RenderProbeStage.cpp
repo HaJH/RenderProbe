@@ -204,7 +204,7 @@ bool FRenderProbeStage::Capture(const UMeshComponent& Subject, const FRenderProb
 	CaptureComponent->CaptureSource = SCS_FinalColorLDR;
 	CaptureComponent->bCaptureEveryFrame = false;
 	CaptureComponent->bCaptureOnMovement = false;
-	CaptureComponent->bAlwaysPersistRenderingState = CaptureSetup.bUsesLumen;
+	CaptureComponent->bAlwaysPersistRenderingState = true;
 	CaptureComponent->FOVAngle = Camera.Fov;
 	CaptureComponent->PostProcessSettings = CaptureSetup.PostProcess;
 	CaptureComponent->PostProcessBlendWeight = 1.f;
