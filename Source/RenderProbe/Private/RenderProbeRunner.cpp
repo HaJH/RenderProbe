@@ -47,6 +47,12 @@ namespace RenderProbeRunnerLocal
 		return !IsRunningCommandlet() || IsAllowCommandletRendering();
 	}
 
+	static void ReportRenderingUnavailable(const FString& Detail, FRenderProbeResult& OutResult)
+	{
+		UE_LOG(LogRenderProbe, Error, TEXT("%s"), *Detail);
+		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::RenderingUnavailable, FString(), Detail));
+	}
+
 	static TSet<FString> CollectComparedItemNames(const FRenderProbeJob& Job)
 	{
 		TSet<FString> Names;
@@ -411,14 +417,18 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 	}
 	if (!RenderProbeRunnerLocal::CanRenderInThisProcess())
 	{
-		const FString Detail = FString::Printf(TEXT("this commandlet cannot render; add %s to the command line. No subject was captured"),
-			RenderProbeCommandLineSwitches::AllowCommandletRendering);
-		UE_LOG(LogRenderProbe, Error, TEXT("%s"), *Detail);
-		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::RenderingUnavailable, FString(), Detail));
+		RenderProbeRunnerLocal::ReportRenderingUnavailable(FString::Printf(TEXT("this commandlet cannot render; add %s to the command line. No subject was captured"),
+			RenderProbeCommandLineSwitches::AllowCommandletRendering), OutResult);
 		return;
 	}
 
 	FRenderProbeStage Stage(Settings, Assets, Job.Resolution);
+	if (!Stage.HasRenderScene())
+	{
+		RenderProbeRunnerLocal::ReportRenderingUnavailable(
+			TEXT("the preview world has no render scene (the process runs without an RHI or is not a client). No subject was captured"), OutResult);
+		return;
+	}
 	for (const FString& FailedLevel : Stage.StreamLevels(Assets.Levels))
 	{
 		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::MissingAsset, FString(),

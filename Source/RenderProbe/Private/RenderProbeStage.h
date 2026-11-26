@@ -46,6 +46,8 @@ public:
 	FRenderProbeStage(FRenderProbeStage&&) = delete;
 	FRenderProbeStage& operator=(FRenderProbeStage&&) = delete;
 
+	bool HasRenderScene() const;
+
 	TArray<FString> StreamLevels(const TArray<FRenderProbeStageLevel>& Levels);
 
 	UMeshComponent* PlaceSubject(UObject& Mesh, const TArray<UMaterialInterface*>& SlotMaterials, const FRenderProbeTransform& Transform);

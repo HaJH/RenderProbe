@@ -29,7 +29,7 @@ UnrealEditor-Cmd.exe <Project>.uproject -run=RenderProbe -schema=<schema file to
 - `-job=<file>` reads the job from a JSON file and runs it. Quote paths that contain spaces: `-job="C:/My Jobs/job.json"`.
 - `-out=<folder>` is optional and replaces the job's `outputDir`.
 - `-schema=<file>` cannot be combined with `-job=` or `-out=`.
-- `-AllowCommandletRendering` is required for any job that captures images. Without it the commandlet does not render; the result gets a `RenderingUnavailable` diagnostic and is not ok. Items that only measure statistics (no mesh) do not need it.
+- `-AllowCommandletRendering` is required for any job that captures images. Without it the commandlet does not render; the result gets a `RenderingUnavailable` diagnostic and is not ok. A process without an RHI (`-nullrhi`) gets the same diagnostic. Items that only measure statistics (no mesh) do not need it.
 
 The result is written to `<outputDir>/result.json` as with the other entry points, and is also printed to the log.
 

@@ -19,6 +19,7 @@
 #include "ImageUtils.h"
 #include "PreviewScene.h"
 #include "RenderProbeJob.h"
+#include "SceneInterface.h"
 #include "UObject/Package.h"
 
 namespace RenderProbeStageLocal
@@ -143,6 +144,12 @@ void FRenderProbeStage::AddRig(const FRenderProbeRigSettings& Rig, const FRender
 		}
 		Scene->AddComponent(Floor, RenderProbeStageLocal::ToTransform(Rig.Floor.Transform));
 	}
+}
+
+bool FRenderProbeStage::HasRenderScene() const
+{
+	const FSceneInterface* SceneInterface = Scene->GetWorld()->Scene;
+	return SceneInterface && SceneInterface->GetRenderScene();
 }
 
 TArray<FString> FRenderProbeStage::StreamLevels(const TArray<FRenderProbeStageLevel>& Levels)

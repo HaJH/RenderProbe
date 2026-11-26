@@ -22,7 +22,7 @@ namespace RenderProbeCommandletLocal
 URenderProbeCommandlet::URenderProbeCommandlet(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	IsClient = false;
+	IsClient = true;
 	IsServer = false;
 	IsEditor = true;
 	LogToConsole = true;

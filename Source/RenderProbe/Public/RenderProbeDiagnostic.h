@@ -18,7 +18,7 @@ enum class ERenderProbeDiagnosticKind : uint8
 	DefaultMaterial UMETA(ToolTip = "After waiting, a slot still renders with the engine default material."),
 	Timeout UMETA(ToolTip = "Waiting for shader compilation or streaming passed the time limit."),
 	UnsupportedLevel UMETA(ToolTip = "An environment level is a world partition map."),
-	RenderingUnavailable UMETA(ToolTip = "The job has subjects to capture but the process cannot render: it is a commandlet started without -AllowCommandletRendering. No subject is captured; statistics are still measured. Reported at the top level."),
+	RenderingUnavailable UMETA(ToolTip = "The job has subjects to capture but the process cannot render: it is a commandlet started without -AllowCommandletRendering, or its preview world has no render scene (no RHI). No subject is captured; statistics are still measured. Reported at the top level."),
 };
 
 USTRUCT(BlueprintType, meta = (ToolTip = "One diagnostic."))
