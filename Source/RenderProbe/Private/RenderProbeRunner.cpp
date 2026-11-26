@@ -5,6 +5,7 @@
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
 #include "Components/MeshComponent.h"
+#include "CoreGlobals.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkinnedAssetCommon.h"
 #include "Engine/StaticMesh.h"
@@ -25,6 +26,7 @@
 #include "RenderProbeJob.h"
 #include "RenderProbeJobValidation.h"
 #include "RenderProbeJson.h"
+#include "RenderProbeLog.h"
 #include "RenderProbeMaterialStats.h"
 #include "RenderProbeOutputPaths.h"
 #include "RenderProbeProfile.h"
@@ -37,6 +39,12 @@ namespace RenderProbeRunnerLocal
 	static constexpr const TCHAR* WriteResultStep = TEXT("writing result.json");
 	static constexpr const TCHAR* RepeatCapturePrefix = TEXT("RenderProbeRepeat-");
 	static constexpr const TCHAR* RepeatCaptureExtension = TEXT(".png");
+	static constexpr const TCHAR* AllowCommandletRenderingSwitch = TEXT("-AllowCommandletRendering");
+
+	static bool CanRenderInThisProcess()
+	{
+		return !IsRunningCommandlet() || IsAllowCommandletRendering();
+	}
 
 	static TSet<FString> CollectComparedItemNames(const FRenderProbeJob& Job)
 	{
@@ -275,7 +283,7 @@ FRenderProbeResult URenderProbeRunner::Run(const FRenderProbeJob& Job)
 	return Finish(Job.OutputDir, MoveTemp(Result));
 }
 
-FRenderProbeResult URenderProbeRunner::RunJson(const FString& JobJson)
+FRenderProbeResult URenderProbeRunner::RunJson(const FString& JobJson, const TOptional<FString>& OutputDirOverride)
 {
 	FRenderProbeJob Job;
 	FString Error;
@@ -283,17 +291,21 @@ FRenderProbeResult URenderProbeRunner::RunJson(const FString& JobJson)
 	{
 		return InvalidJobResult(MoveTemp(Error));
 	}
+	if (OutputDirOverride.IsSet())
+	{
+		Job.OutputDir = OutputDirOverride.GetValue();
+	}
 	return Run(Job);
 }
 
-FRenderProbeResult URenderProbeRunner::RunJobFile(const FString& JobFilePath)
+FRenderProbeResult URenderProbeRunner::RunJobFile(const FString& JobFilePath, const TOptional<FString>& OutputDirOverride)
 {
 	FString JobJson;
 	if (!FFileHelper::LoadFileToString(JobJson, *JobFilePath))
 	{
 		return InvalidJobResult(FString::Printf(TEXT("cannot read job file '%s'"), *JobFilePath));
 	}
-	return RunJson(JobJson);
+	return RunJson(JobJson, OutputDirOverride);
 }
 
 UObject* URenderProbeRunner::LoadAsset(const FString& Path)
@@ -386,6 +398,14 @@ void URenderProbeRunner::CaptureItems(const FRenderProbeJob& Job, const FRenderP
 	const bool bAnyMesh = Algo::AnyOf(Plans, [](const FItemPlan& Plan) { return Plan.Mesh != nullptr; });
 	if (!bAnyMesh || Job.Cameras.IsEmpty())
 	{
+		return;
+	}
+	if (!RenderProbeRunnerLocal::CanRenderInThisProcess())
+	{
+		const FString Detail = FString::Printf(TEXT("this commandlet cannot render; add %s to the command line. No subject was captured"),
+			RenderProbeRunnerLocal::AllowCommandletRenderingSwitch);
+		UE_LOG(LogRenderProbe, Error, TEXT("%s"), *Detail);
+		OutResult.Diagnostics.Add(FRenderProbeDiagnostic::Make(ERenderProbeDiagnosticKind::RenderingUnavailable, FString(), Detail));
 		return;
 	}
 

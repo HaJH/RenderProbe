@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Misc/Optional.h"
 #include "RenderProbeResult.h"
 #include "UObject/Object.h"
 
@@ -24,9 +25,9 @@ class RENDERPROBE_API URenderProbeRunner : public UObject
 public:
 	FRenderProbeResult Run(const FRenderProbeJob& Job);
 
-	FRenderProbeResult RunJson(const FString& JobJson);
+	FRenderProbeResult RunJson(const FString& JobJson, const TOptional<FString>& OutputDirOverride = {});
 
-	FRenderProbeResult RunJobFile(const FString& JobFilePath);
+	FRenderProbeResult RunJobFile(const FString& JobFilePath, const TOptional<FString>& OutputDirOverride = {});
 
 private:
 	struct FSlotMaterial
