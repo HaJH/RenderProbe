@@ -35,11 +35,11 @@ namespace RenderProbeTestMaterials
 	static constexpr float SignedToUnitBias = 0.5f;
 
 	template <typename ObjectType>
-	static ObjectType* NewTransient(const TCHAR* BaseName)
+	static TStrongObjectPtr<ObjectType> NewTransient(const TCHAR* BaseName)
 	{
 		UPackage* Package = GetTransientPackage();
 		const FName Name = MakeUniqueObjectName(Package, ObjectType::StaticClass(), FName(BaseName));
-		return NewObject<ObjectType>(Package, Name, RF_Transient);
+		return TStrongObjectPtr<ObjectType>(NewObject<ObjectType>(Package, Name, RF_Transient));
 	}
 
 	template <typename ExpressionType>
@@ -48,100 +48,100 @@ namespace RenderProbeTestMaterials
 		return CastChecked<ExpressionType>(UMaterialEditingLibrary::CreateMaterialExpression(Material, ExpressionType::StaticClass()));
 	}
 
-	UMaterial* CreateStaticSwitchMaterial(const FName SwitchName)
+	TStrongObjectPtr<UMaterial> CreateStaticSwitchMaterial(const FName SwitchName)
 	{
-		UMaterial* Material = NewTransient<UMaterial>(TEXT("M_RenderProbeTestSwitch"));
+		TStrongObjectPtr<UMaterial> Material = NewTransient<UMaterial>(TEXT("M_RenderProbeTestSwitch"));
 
-		UMaterialExpressionStaticSwitchParameter* Switch = AddExpression<UMaterialExpressionStaticSwitchParameter>(Material);
+		UMaterialExpressionStaticSwitchParameter* Switch = AddExpression<UMaterialExpressionStaticSwitchParameter>(Material.Get());
 		Switch->ParameterName = SwitchName;
 		Switch->DefaultValue = false;
 
-		UMaterialExpressionTime* Time = AddExpression<UMaterialExpressionTime>(Material);
-		UMaterialExpressionSine* Sine = AddExpression<UMaterialExpressionSine>(Material);
-		UMaterialExpressionConstant3Vector* Constant = AddExpression<UMaterialExpressionConstant3Vector>(Material);
+		UMaterialExpressionTime* Time = AddExpression<UMaterialExpressionTime>(Material.Get());
+		UMaterialExpressionSine* Sine = AddExpression<UMaterialExpressionSine>(Material.Get());
+		UMaterialExpressionConstant3Vector* Constant = AddExpression<UMaterialExpressionConstant3Vector>(Material.Get());
 
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Time, FString(), Sine, FString()));
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Sine, FString(), Switch, SwitchTrueInputName));
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Constant, FString(), Switch, SwitchFalseInputName));
 		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Switch, FString(), MP_EmissiveColor));
 
-		UMaterialEditingLibrary::RecompileMaterial(Material);
+		UMaterialEditingLibrary::RecompileMaterial(Material.Get());
 		return Material;
 	}
 
-	UMaterialInstanceConstant* CreateInstanceWithStaticSwitch(UMaterial* Parent, const FName SwitchName, const bool bValue)
+	TStrongObjectPtr<UMaterialInstanceConstant> CreateInstanceWithStaticSwitch(UMaterial* Parent, const FName SwitchName, const bool bValue)
 	{
-		UMaterialInstanceConstant* Instance = NewTransient<UMaterialInstanceConstant>(TEXT("MI_RenderProbeTestSwitch"));
-		UMaterialEditingLibrary::SetMaterialInstanceParent(Instance, Parent);
-		if (!UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance, SwitchName, bValue))
+		TStrongObjectPtr<UMaterialInstanceConstant> Instance = NewTransient<UMaterialInstanceConstant>(TEXT("MI_RenderProbeTestSwitch"));
+		UMaterialEditingLibrary::SetMaterialInstanceParent(Instance.Get(), Parent);
+		if (!UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance.Get(), SwitchName, bValue))
 		{
 			return nullptr;
 		}
 		return Instance;
 	}
 
-	UMaterial* CreateMaterialMissingTexture()
+	TStrongObjectPtr<UMaterial> CreateMaterialMissingTexture()
 	{
-		UMaterial* Material = NewTransient<UMaterial>(TEXT("M_RenderProbeTestMissingTexture"));
-		UMaterialExpressionTextureSample* Sample = AddExpression<UMaterialExpressionTextureSample>(Material);
+		TStrongObjectPtr<UMaterial> Material = NewTransient<UMaterial>(TEXT("M_RenderProbeTestMissingTexture"));
+		UMaterialExpressionTextureSample* Sample = AddExpression<UMaterialExpressionTextureSample>(Material.Get());
 		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Sample, FString(), MP_BaseColor));
-		UMaterialEditingLibrary::RecompileMaterial(Material);
+		UMaterialEditingLibrary::RecompileMaterial(Material.Get());
 		return Material;
 	}
 
-	static UMaterial* NewUnlitMaterial(const TCHAR* BaseName)
+	static TStrongObjectPtr<UMaterial> NewUnlitMaterial(const TCHAR* BaseName)
 	{
-		UMaterial* Material = NewTransient<UMaterial>(BaseName);
+		TStrongObjectPtr<UMaterial> Material = NewTransient<UMaterial>(BaseName);
 		Material->SetShadingModel(MSM_Unlit);
 		return Material;
 	}
 
-	UMaterial* CreateConstantColorMaterial(const FLinearColor& Color)
+	TStrongObjectPtr<UMaterial> CreateConstantColorMaterial(const FLinearColor& Color)
 	{
-		UMaterial* Material = NewUnlitMaterial(ConstantColorMaterialName);
+		TStrongObjectPtr<UMaterial> Material = NewUnlitMaterial(ConstantColorMaterialName);
 
-		UMaterialExpressionConstant3Vector* Constant = AddExpression<UMaterialExpressionConstant3Vector>(Material);
+		UMaterialExpressionConstant3Vector* Constant = AddExpression<UMaterialExpressionConstant3Vector>(Material.Get());
 		Constant->Constant = Color;
 		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Constant, FString(), MP_EmissiveColor));
 
-		UMaterialEditingLibrary::RecompileMaterial(Material);
+		UMaterialEditingLibrary::RecompileMaterial(Material.Get());
 		return Material;
 	}
 
-	UMaterial* CreateTimeColorMaterial()
+	TStrongObjectPtr<UMaterial> CreateTimeColorMaterial()
 	{
-		UMaterial* Material = NewUnlitMaterial(TEXT("M_RenderProbeTestTimeColor"));
+		TStrongObjectPtr<UMaterial> Material = NewUnlitMaterial(TEXT("M_RenderProbeTestTimeColor"));
 
-		UMaterialExpressionTime* Time = AddExpression<UMaterialExpressionTime>(Material);
-		UMaterialExpressionAdd* Offset = AddExpression<UMaterialExpressionAdd>(Material);
+		UMaterialExpressionTime* Time = AddExpression<UMaterialExpressionTime>(Material.Get());
+		UMaterialExpressionAdd* Offset = AddExpression<UMaterialExpressionAdd>(Material.Get());
 		Offset->ConstB = TimeColorOffset;
-		UMaterialExpressionFrac* Frac = AddExpression<UMaterialExpressionFrac>(Material);
+		UMaterialExpressionFrac* Frac = AddExpression<UMaterialExpressionFrac>(Material.Get());
 
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Time, FString(), Offset, BinaryInputAName));
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Offset, FString(), Frac, FString()));
 		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Frac, FString(), MP_EmissiveColor));
 
-		UMaterialEditingLibrary::RecompileMaterial(Material);
+		UMaterialEditingLibrary::RecompileMaterial(Material.Get());
 		return Material;
 	}
 
-	UMaterial* CreateSkyAtmosphereLightDirectionMaterial()
+	TStrongObjectPtr<UMaterial> CreateSkyAtmosphereLightDirectionMaterial()
 	{
-		UMaterial* Material = NewUnlitMaterial(TEXT("M_RenderProbeTestSkyLightDirection"));
+		TStrongObjectPtr<UMaterial> Material = NewUnlitMaterial(TEXT("M_RenderProbeTestSkyLightDirection"));
 
 		UClass* DirectionClass = FindObject<UClass>(nullptr, SkyAtmosphereLightDirectionClassPath);
 		check(DirectionClass);
-		UMaterialExpression* Direction = UMaterialEditingLibrary::CreateMaterialExpression(Material, DirectionClass);
-		UMaterialExpressionMultiply* Scale = AddExpression<UMaterialExpressionMultiply>(Material);
+		UMaterialExpression* Direction = UMaterialEditingLibrary::CreateMaterialExpression(Material.Get(), DirectionClass);
+		UMaterialExpressionMultiply* Scale = AddExpression<UMaterialExpressionMultiply>(Material.Get());
 		Scale->ConstB = SignedToUnitScale;
-		UMaterialExpressionAdd* Bias = AddExpression<UMaterialExpressionAdd>(Material);
+		UMaterialExpressionAdd* Bias = AddExpression<UMaterialExpressionAdd>(Material.Get());
 		Bias->ConstB = SignedToUnitBias;
 
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Direction, FString(), Scale, BinaryInputAName));
 		verify(UMaterialEditingLibrary::ConnectMaterialExpressions(Scale, FString(), Bias, BinaryInputAName));
 		verify(UMaterialEditingLibrary::ConnectMaterialProperty(Bias, FString(), MP_EmissiveColor));
 
-		UMaterialEditingLibrary::RecompileMaterial(Material);
+		UMaterialEditingLibrary::RecompileMaterial(Material.Get());
 		return Material;
 	}
 }

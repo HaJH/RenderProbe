@@ -6,22 +6,24 @@
 
 #if WITH_AUTOMATION_TESTS
 
+#include "UObject/StrongObjectPtr.h"
+
 class UMaterial;
 class UMaterialInstanceConstant;
 
 namespace RenderProbeTestMaterials
 {
-	UMaterial* CreateStaticSwitchMaterial(FName SwitchName);
+	TStrongObjectPtr<UMaterial> CreateStaticSwitchMaterial(FName SwitchName);
 
-	UMaterialInstanceConstant* CreateInstanceWithStaticSwitch(UMaterial* Parent, FName SwitchName, bool bValue);
+	TStrongObjectPtr<UMaterialInstanceConstant> CreateInstanceWithStaticSwitch(UMaterial* Parent, FName SwitchName, bool bValue);
 
-	UMaterial* CreateMaterialMissingTexture();
+	TStrongObjectPtr<UMaterial> CreateMaterialMissingTexture();
 
-	UMaterial* CreateConstantColorMaterial(const FLinearColor& Color);
+	TStrongObjectPtr<UMaterial> CreateConstantColorMaterial(const FLinearColor& Color);
 
-	UMaterial* CreateTimeColorMaterial();
+	TStrongObjectPtr<UMaterial> CreateTimeColorMaterial();
 
-	UMaterial* CreateSkyAtmosphereLightDirectionMaterial();
+	TStrongObjectPtr<UMaterial> CreateSkyAtmosphereLightDirectionMaterial();
 }
 
 #endif
