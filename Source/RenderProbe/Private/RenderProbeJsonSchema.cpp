@@ -41,7 +41,7 @@ namespace RenderProbeJsonSchemaLocal
 	/** Properties FJsonObjectConverter leaves out when it writes a structure with no skip flags given. */
 	static constexpr EPropertyFlags ConverterSkipFlags = CPF_Deprecated | CPF_Transient;
 
-	static TSharedRef<FJsonObject> PropertySchema(const FProperty& Property, TArray<const UStruct*>& StructStack);
+	static TSharedRef<FJsonObject> MakePropertySchema(const FProperty& Property, TArray<const UStruct*>& StructStack);
 
 	static TSharedRef<FJsonObject> MakeTyped(const TCHAR* Type)
 	{
@@ -58,7 +58,7 @@ namespace RenderProbeJsonSchemaLocal
 		}
 	}
 
-	static FString DescriptionOf(const FJsonObject& Schema)
+	static FString GetDescription(const FJsonObject& Schema)
 	{
 		FString Description;
 		Schema.TryGetStringField(DescriptionField, Description);
@@ -78,7 +78,7 @@ namespace RenderProbeJsonSchemaLocal
 		return First + DescriptionSeparator + Second;
 	}
 
-	static TSharedRef<FJsonObject> EnumSchema(const UEnum& Enum)
+	static TSharedRef<FJsonObject> MakeEnumSchema(const UEnum& Enum)
 	{
 		TSharedRef<FJsonObject> Schema = MakeTyped(StringType);
 
@@ -103,7 +103,7 @@ namespace RenderProbeJsonSchemaLocal
 		return Schema;
 	}
 
-	static TSharedRef<FJsonObject> StructSchema(const UStruct& Struct, TArray<const UStruct*>& StructStack)
+	static TSharedRef<FJsonObject> MakeStructSchema(const UStruct& Struct, TArray<const UStruct*>& StructStack)
 	{
 		checkf(!StructStack.Contains(&Struct), RecursiveStructFormat, *Struct.GetName());
 		StructStack.Push(&Struct);
@@ -119,7 +119,7 @@ namespace RenderProbeJsonSchemaLocal
 			{
 				continue;
 			}
-			Properties->SetObjectField(FJsonObjectConverter::StandardizeCase(Property.GetAuthoredName()), PropertySchema(Property, StructStack));
+			Properties->SetObjectField(FJsonObjectConverter::StandardizeCase(Property.GetAuthoredName()), MakePropertySchema(Property, StructStack));
 		}
 		Schema->SetObjectField(PropertiesField, Properties);
 
@@ -127,14 +127,14 @@ namespace RenderProbeJsonSchemaLocal
 		return Schema;
 	}
 
-	static TSharedRef<FJsonObject> StructValueSchema(const UScriptStruct& Struct, TArray<const UStruct*>& StructStack)
+	static TSharedRef<FJsonObject> MakeStructValueSchema(const UScriptStruct& Struct, TArray<const UStruct*>& StructStack)
 	{
 		const UScriptStruct::ICppStructOps* CppStructOps = Struct.GetCppStructOps();
 		const bool bWrittenAsOpaqueObject = &Struct == FJsonObjectWrapper::StaticStruct() || FJsonObjectStructInterfaceRegistry::HasStructConverterRegistered(&Struct);
 		const bool bWrittenAsText = !bWrittenAsOpaqueObject && CppStructOps && CppStructOps->HasExportTextItem();
 		if (!bWrittenAsOpaqueObject && !bWrittenAsText)
 		{
-			return StructSchema(Struct, StructStack);
+			return MakeStructSchema(Struct, StructStack);
 		}
 
 		TSharedRef<FJsonObject> Schema = MakeTyped(bWrittenAsText ? StringType : ObjectType);
@@ -143,21 +143,21 @@ namespace RenderProbeJsonSchemaLocal
 	}
 
 	/** Mirrors the property type dispatch of FJsonObjectConverter when it writes a value. */
-	static TSharedRef<FJsonObject> ValueSchema(const FProperty& Property, TArray<const UStruct*>& StructStack)
+	static TSharedRef<FJsonObject> MakeValueSchema(const FProperty& Property, TArray<const UStruct*>& StructStack)
 	{
 		if (const FOptionalProperty* OptionalProperty = CastField<FOptionalProperty>(&Property))
 		{
-			return ValueSchema(*OptionalProperty->GetValueProperty(), StructStack);
+			return MakeValueSchema(*OptionalProperty->GetValueProperty(), StructStack);
 		}
 		if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
 		{
-			return EnumSchema(*EnumProperty->GetEnum());
+			return MakeEnumSchema(*EnumProperty->GetEnum());
 		}
 		if (const FNumericProperty* NumericProperty = CastField<FNumericProperty>(&Property))
 		{
 			if (const UEnum* Enum = NumericProperty->GetIntPropertyEnum())
 			{
-				return EnumSchema(*Enum);
+				return MakeEnumSchema(*Enum);
 			}
 			return MakeTyped(NumericProperty->IsFloatingPoint() ? NumberType : IntegerType);
 		}
@@ -168,24 +168,24 @@ namespace RenderProbeJsonSchemaLocal
 		if (const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(&Property))
 		{
 			TSharedRef<FJsonObject> Schema = MakeTyped(ArrayType);
-			Schema->SetObjectField(ItemsField, ValueSchema(*ArrayProperty->Inner, StructStack));
+			Schema->SetObjectField(ItemsField, MakeValueSchema(*ArrayProperty->Inner, StructStack));
 			return Schema;
 		}
 		if (const FSetProperty* SetProperty = CastField<FSetProperty>(&Property))
 		{
 			TSharedRef<FJsonObject> Schema = MakeTyped(ArrayType);
-			Schema->SetObjectField(ItemsField, ValueSchema(*SetProperty->ElementProp, StructStack));
+			Schema->SetObjectField(ItemsField, MakeValueSchema(*SetProperty->ElementProp, StructStack));
 			return Schema;
 		}
 		if (const FMapProperty* MapProperty = CastField<FMapProperty>(&Property))
 		{
 			TSharedRef<FJsonObject> Schema = MakeTyped(ObjectType);
-			Schema->SetObjectField(AdditionalPropertiesField, ValueSchema(*MapProperty->ValueProp, StructStack));
+			Schema->SetObjectField(AdditionalPropertiesField, MakeValueSchema(*MapProperty->ValueProp, StructStack));
 			return Schema;
 		}
 		if (const FStructProperty* StructProperty = CastField<FStructProperty>(&Property))
 		{
-			return StructValueSchema(*StructProperty->Struct, StructStack);
+			return MakeStructValueSchema(*StructProperty->Struct, StructStack);
 		}
 		if (CastField<FObjectProperty>(&Property) && Property.HasAnyPropertyFlags(CPF_PersistentInstance))
 		{
@@ -194,16 +194,16 @@ namespace RenderProbeJsonSchemaLocal
 		return MakeTyped(StringType);
 	}
 
-	static TSharedRef<FJsonObject> PropertySchema(const FProperty& Property, TArray<const UStruct*>& StructStack)
+	static TSharedRef<FJsonObject> MakePropertySchema(const FProperty& Property, TArray<const UStruct*>& StructStack)
 	{
-		const TSharedRef<FJsonObject> Value = ValueSchema(Property, StructStack);
+		const TSharedRef<FJsonObject> Value = MakeValueSchema(Property, StructStack);
 		TSharedRef<FJsonObject> Schema = Value;
 		if (Property.ArrayDim > 1)
 		{
 			Schema = MakeTyped(ArrayType);
 			Schema->SetObjectField(ItemsField, Value);
 		}
-		SetDescription(*Schema, JoinDescriptions(Property.GetMetaData(ToolTipKey), DescriptionOf(*Value)));
+		SetDescription(*Schema, JoinDescriptions(Property.GetMetaData(ToolTipKey), GetDescription(*Value)));
 		return Schema;
 	}
 }
@@ -214,8 +214,8 @@ namespace RenderProbeJson
 	{
 		TArray<const UStruct*> StructStack;
 		const TSharedRef<FJsonObject> Schemas = MakeShared<FJsonObject>();
-		Schemas->SetObjectField(RenderProbeJsonSchemaLocal::JobField, RenderProbeJsonSchemaLocal::StructSchema(*FRenderProbeJob::StaticStruct(), StructStack));
-		Schemas->SetObjectField(RenderProbeJsonSchemaLocal::ResultField, RenderProbeJsonSchemaLocal::StructSchema(*FRenderProbeResult::StaticStruct(), StructStack));
+		Schemas->SetObjectField(RenderProbeJsonSchemaLocal::JobField, RenderProbeJsonSchemaLocal::MakeStructSchema(*FRenderProbeJob::StaticStruct(), StructStack));
+		Schemas->SetObjectField(RenderProbeJsonSchemaLocal::ResultField, RenderProbeJsonSchemaLocal::MakeStructSchema(*FRenderProbeResult::StaticStruct(), StructStack));
 
 		FString SchemaString;
 		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&SchemaString);

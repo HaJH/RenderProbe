@@ -66,13 +66,13 @@ static bool IsPluginStruct(const UStruct& Struct)
 	return Struct.GetOutermost() == FRenderProbeJob::StaticStruct()->GetOutermost();
 }
 
-static void CheckStruct(const UStruct& Struct, const FJsonObject& Schema, const FString& Path, FSchemaGaps& Gaps);
+static void CheckStruct(const UStruct& Struct, const FJsonObject& Schema, const FString& Path, FSchemaGaps& OutGaps);
 
-static void CheckNestedStructs(const FProperty& Property, const FJsonObject& Schema, const FString& Path, FSchemaGaps& Gaps)
+static void CheckNestedStructs(const FProperty& Property, const FJsonObject& Schema, const FString& Path, FSchemaGaps& OutGaps)
 {
 	if (const FOptionalProperty* OptionalProperty = CastField<FOptionalProperty>(&Property))
 	{
-		CheckNestedStructs(*OptionalProperty->GetValueProperty(), Schema, Path, Gaps);
+		CheckNestedStructs(*OptionalProperty->GetValueProperty(), Schema, Path, OutGaps);
 		return;
 	}
 
@@ -93,21 +93,21 @@ static void CheckNestedStructs(const FProperty& Property, const FJsonObject& Sch
 		const FJsonObject* ElementSchema = FindObject(Schema, ElementField);
 		if (!ElementSchema)
 		{
-			Gaps.MissingProperties.Add(Path + ElementSuffix);
+			OutGaps.MissingProperties.Add(Path + ElementSuffix);
 			return;
 		}
-		CheckNestedStructs(*ElementProperty, *ElementSchema, Path + ElementSuffix, Gaps);
+		CheckNestedStructs(*ElementProperty, *ElementSchema, Path + ElementSuffix, OutGaps);
 		return;
 	}
 
 	const FStructProperty* StructProperty = CastField<FStructProperty>(&Property);
 	if (StructProperty && IsPluginStruct(*StructProperty->Struct))
 	{
-		CheckStruct(*StructProperty->Struct, Schema, Path, Gaps);
+		CheckStruct(*StructProperty->Struct, Schema, Path, OutGaps);
 	}
 }
 
-static void CheckStruct(const UStruct& Struct, const FJsonObject& Schema, const FString& Path, FSchemaGaps& Gaps)
+static void CheckStruct(const UStruct& Struct, const FJsonObject& Schema, const FString& Path, FSchemaGaps& OutGaps)
 {
 	const FJsonObject* Properties = FindObject(Schema, PropertiesField);
 	for (TFieldIterator<FProperty> It(&Struct); It; ++It)
@@ -123,16 +123,16 @@ static void CheckStruct(const UStruct& Struct, const FJsonObject& Schema, const 
 		const FJsonObject* PropertySchema = Properties ? FindObject(*Properties, *Key) : nullptr;
 		if (!PropertySchema)
 		{
-			Gaps.MissingProperties.Add(PropertyPath);
+			OutGaps.MissingProperties.Add(PropertyPath);
 			continue;
 		}
 
 		FString Description;
 		if (!PropertySchema->TryGetStringField(DescriptionField, Description) || Description.IsEmpty())
 		{
-			Gaps.MissingDescriptions.Add(PropertyPath);
+			OutGaps.MissingDescriptions.Add(PropertyPath);
 		}
-		CheckNestedStructs(Property, *PropertySchema, PropertyPath, Gaps);
+		CheckNestedStructs(Property, *PropertySchema, PropertyPath, OutGaps);
 	}
 }
 
