@@ -2,6 +2,7 @@
 
 #include "RenderProbeStage.h"
 
+#include "AssetCompilingManager.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -120,7 +121,6 @@ void FRenderProbeStage::AddRig(const FRenderProbeRigSettings& Rig, const FRender
 		else
 		{
 			SkyLight->SourceType = SLS_CapturedScene;
-			SkyLight->bRealTimeCapture = true;
 		}
 		Scene->AddComponent(SkyLight, FTransform::Identity);
 	}
@@ -164,6 +164,7 @@ TArray<FString> FRenderProbeStage::StreamLevels(const TArray<FRenderProbeStageLe
 	}
 
 	World->FlushLevelStreaming(EFlushLevelStreamingType::Full);
+	FAssetCompilingManager::Get().FinishAllCompilation();
 	Scene->UpdateCaptureContents();
 	return FailedLevels;
 }

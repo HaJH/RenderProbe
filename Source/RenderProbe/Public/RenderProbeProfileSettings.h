@@ -48,7 +48,7 @@ struct RENDERPROBE_API FRenderProbeSkyLightSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RenderProbe", meta = (ToolTip = "Sky light intensity scale."))
 	float Intensity = 1.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RenderProbe", meta = (ToolTip = "Cubemap asset path for the sky light. Empty means the sky light captures the scene in real time."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RenderProbe", meta = (ToolTip = "Cubemap asset path for the sky light. Empty means the sky light captures the scene (sky atmosphere and environment levels) once, after the rig and levels are in place and before any subject is placed."))
 	TSoftObjectPtr<UTextureCube> Cubemap;
 };
 
