@@ -5,6 +5,7 @@
 #include "ImageCore.h"
 #include "ImageUtils.h"
 #include "Materials/Material.h"
+#include "Math/Color.h"
 #include "RenderProbeDiagnostic.h"
 #include "RenderProbeJob.h"
 #include "RenderProbeOutputPaths.h"
@@ -86,7 +87,9 @@ TEST_CLASS(RenderProbeCapture, "RenderProbe.Integration.Capture")
 			return;
 		}
 
-		const FRenderProbeResult Result = RunJob(MakeCubeJob(FirstOutputDir.Get(), nullptr));
+		const TStrongObjectPtr<UMaterial> White(RenderProbeTestMaterials::CreateConstantColorMaterial(FLinearColor::White));
+
+		const FRenderProbeResult Result = RunJob(MakeCubeJob(FirstOutputDir.Get(), White.Get()));
 
 		ASSERT_THAT(AreEqual(1, Result.Items.Num()));
 		ASSERT_THAT(IsTrue(Result.Items[0].Diagnostics.IsEmpty()));

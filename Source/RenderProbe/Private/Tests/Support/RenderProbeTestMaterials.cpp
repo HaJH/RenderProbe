@@ -73,7 +73,8 @@ namespace RenderProbeTestMaterials
 	{
 		TStrongObjectPtr<UMaterialInstanceConstant> Instance = NewTransient<UMaterialInstanceConstant>(TEXT("MI_RenderProbeTestSwitch"));
 		UMaterialEditingLibrary::SetMaterialInstanceParent(Instance.Get(), Parent);
-		if (!UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance.Get(), SwitchName, bValue))
+		UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance.Get(), SwitchName, bValue);
+		if (UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance.Get(), SwitchName) != bValue)
 		{
 			return nullptr;
 		}
